@@ -30,8 +30,14 @@ set(PORTABLE_SOURCES
 )
 
 # Golden fixtures shipped by packages/core (semantics authority).
-set(FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/saves")
-set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/quests")
+set(FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/saves")
+if(NOT EXISTS "${FIXTURE_DIR}")
+  set(FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/saves")
+endif()
+set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/quests")
+if(NOT EXISTS "${QUESTS_DIR}")
+  set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/quests")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
 
