@@ -21,6 +21,25 @@ in `Source/InsimulRuntime/Portable/InsimulContentLibrary.{h,cpp}` and is exercis
   with an error whose message contains `expectedErrorContains`. Covers the
   schema-version gate (missing / unsupported), missing top-level identity
   (`id` / `name`), and a missing required `id` in each entity collection.
+- `library-golden.json` — the **canonical semantic projection** of the golden
+  library: a key-sorted, minified, JS-faithful re-serialization of the
+  *materialized* entities (not the raw input). Importing `library-basic.json`
+  and re-projecting the imported entities MUST byte-match this file. Because it
+  is derived from the DTOs rather than the source document, matching it proves
+  the import preserved semantics rather than echoing bytes.
+- `golden-vectors.json` — cross-engine round-trip vectors: SHA-256 hex of each
+  library's canonical projection. Byte-portable across the TS/Unity/Unreal
+  runtimes — every engine must reproduce these exact hashes.
+
+## Round-trip parity (US-IM2)
+
+The Unreal leg re-serializes imported content via
+`FInsimulContentLibrary::CanonicalProjection()` (SHA-256 via
+`ProjectionIntegrity()`) and pins it against `library-golden.json` +
+`golden-vectors.json` in `tools/verify-unreal/test_content_roundtrip.cpp`. The
+projection is itself a valid content library, so `import → project → import →
+project` is a fixpoint — the per-engine leg of the author-once/use-anywhere
+proof.
 
 ## Library shape
 

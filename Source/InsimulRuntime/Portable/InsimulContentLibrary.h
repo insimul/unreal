@@ -111,6 +111,21 @@ public:
 	const FSettlementDTO* FindTown(const std::string& Id) const;
 	const FContentNarrativeDTO* FindNarrative(const std::string& Id) const;
 
+	/**
+	 * Canonical semantic projection of the MATERIALIZED entities (US-IM2). This
+	 * re-serializes the imported DTOs — not the raw input document — into the
+	 * shared canonical JSON form (key-sorted, minified, JS-faithful numbers and
+	 * string escaping), so it is byte-comparable across the TS/Unity/Unreal
+	 * runtimes. Two libraries with the same author-once semantics project to the
+	 * same bytes regardless of source key order or whitespace; this is the
+	 * per-engine leg of the author-once/use-anywhere round-trip proof. Empty
+	 * when the importer is not loaded.
+	 */
+	std::string CanonicalProjection() const;
+
+	/** SHA-256 hex of CanonicalProjection() — the corpus round-trip vector. */
+	std::string ProjectionIntegrity() const;
+
 private:
 	bool bLoaded = false;
 	FContentLibraryDTO Data;

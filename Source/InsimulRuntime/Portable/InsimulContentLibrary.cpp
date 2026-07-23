@@ -2,9 +2,58 @@
 
 #include "InsimulContentLibrary.h"
 
+#include "InsimulCanonicalJson.h"
+#include "InsimulSha256.h"
+
+#include <memory>
+#include <utility>
+
 namespace insimul {
 
 namespace {
+
+// ── FJsonValue builders (for the canonical projection, US-IM2) ─────────────
+// The materialized DTOs are re-encoded into FJsonValue nodes so the shared
+// CanonicalJsonStringify — the byte-faithful semantics authority — renders them
+// identically to how the TS/Unity legs render the same content.
+
+FJsonValuePtr MakeString(const std::string& S) {
+	auto V = std::make_shared<FJsonValue>();
+	V->Type = EJsonType::String;
+	V->StringValue = S;
+	return V;
+}
+
+FJsonValuePtr MakeInt(long long N) {
+	auto V = std::make_shared<FJsonValue>();
+	V->Type = EJsonType::Number;
+	V->NumberValue = static_cast<double>(N);
+	V->RawNumber = std::to_string(N);
+	return V;
+}
+
+FJsonValuePtr MakeBool(bool B) {
+	auto V = std::make_shared<FJsonValue>();
+	V->Type = EJsonType::Bool;
+	V->BoolValue = B;
+	return V;
+}
+
+FJsonValuePtr MakeObject() {
+	auto V = std::make_shared<FJsonValue>();
+	V->Type = EJsonType::Object;
+	return V;
+}
+
+FJsonValuePtr MakeArray() {
+	auto V = std::make_shared<FJsonValue>();
+	V->Type = EJsonType::Array;
+	return V;
+}
+
+void Set(const FJsonValuePtr& Obj, const std::string& Key, FJsonValuePtr Value) {
+	Obj->ObjectItems.emplace_back(Key, std::move(Value));
+}
 
 /** Require a non-empty string member; on failure set OutError and return false. */
 bool RequireId(const FJsonValue& Obj, const std::string& Where, std::string& OutError) {
@@ -216,6 +265,97 @@ bool FInsimulContentLibrary::ImportFromJson(const std::string& Json, std::string
 
 	bLoaded = true;
 	return true;
+}
+
+std::string FInsimulContentLibrary::CanonicalProjection() const {
+	if (!bLoaded) {
+		return std::string();
+	}
+
+	const FJsonValuePtr Root = MakeObject();
+
+	// Library identity.
+	Set(Root, "schemaVersion", MakeInt(Data.SchemaVersion));
+	Set(Root, "id", MakeString(Data.Id));
+	Set(Root, "name", MakeString(Data.Name));
+	Set(Root, "description", MakeString(Data.Description));
+	Set(Root, "targetLanguage", MakeString(Data.TargetLanguage));
+
+	// items[] — array order preserved (arrays are not sorted).
+	const FJsonValuePtr Items = MakeArray();
+	for (const FContentItemDTO& I : Data.Items) {
+		const FJsonValuePtr Obj = MakeObject();
+		Set(Obj, "id", MakeString(I.Id));
+		Set(Obj, "name", MakeString(I.Name));
+		Set(Obj, "itemType", MakeString(I.ItemType));
+		Set(Obj, "description", MakeString(I.Description));
+		Set(Obj, "value", MakeInt(I.Value));
+		Items->ArrayItems.push_back(Obj);
+	}
+	Set(Root, "items", Items);
+
+	// quests[] — reuse the world-snapshot quest semantics.
+	const FJsonValuePtr Quests = MakeArray();
+	for (const FQuestDTO& Q : Data.Quests) {
+		const FJsonValuePtr Obj = MakeObject();
+		Set(Obj, "id", MakeString(Q.Id));
+		Set(Obj, "name", MakeString(Q.Name));
+		Set(Obj, "description", MakeString(Q.Description));
+		Set(Obj, "giverNpcId", MakeString(Q.GiverNpcId));
+		Set(Obj, "status", MakeString(Q.Status));
+		Set(Obj, "content", MakeString(Q.Content));
+		Set(Obj, "questType", MakeString(Q.QuestType));
+		Set(Obj, "difficulty", MakeString(Q.Difficulty));
+		Set(Obj, "targetLanguage", MakeString(Q.TargetLanguage));
+		Quests->ArrayItems.push_back(Obj);
+	}
+	Set(Root, "quests", Quests);
+
+	// characters[] — reuse the world-snapshot character semantics.
+	const FJsonValuePtr Characters = MakeArray();
+	for (const FCharacterDTO& C : Data.Characters) {
+		const FJsonValuePtr Obj = MakeObject();
+		Set(Obj, "id", MakeString(C.Id));
+		Set(Obj, "firstName", MakeString(C.FirstName));
+		Set(Obj, "lastName", MakeString(C.LastName));
+		Set(Obj, "gender", MakeString(C.Gender));
+		Set(Obj, "occupation", MakeString(C.Occupation));
+		Set(Obj, "currentLocation", MakeString(C.CurrentLocation));
+		Set(Obj, "isAlive", MakeBool(C.bIsAlive));
+		Characters->ArrayItems.push_back(Obj);
+	}
+	Set(Root, "characters", Characters);
+
+	// towns[] — reuse the world-snapshot settlement semantics.
+	const FJsonValuePtr Towns = MakeArray();
+	for (const FSettlementDTO& T : Data.Towns) {
+		const FJsonValuePtr Obj = MakeObject();
+		Set(Obj, "id", MakeString(T.Id));
+		Set(Obj, "name", MakeString(T.Name));
+		Set(Obj, "settlementType", MakeString(T.SettlementType));
+		Set(Obj, "population", MakeInt(T.Population));
+		Set(Obj, "countryId", MakeString(T.CountryId));
+		Towns->ArrayItems.push_back(Obj);
+	}
+	Set(Root, "towns", Towns);
+
+	// narratives[].
+	const FJsonValuePtr Narratives = MakeArray();
+	for (const FContentNarrativeDTO& N : Data.Narratives) {
+		const FJsonValuePtr Obj = MakeObject();
+		Set(Obj, "id", MakeString(N.Id));
+		Set(Obj, "title", MakeString(N.Title));
+		Set(Obj, "body", MakeString(N.Body));
+		Set(Obj, "language", MakeString(N.Language));
+		Narratives->ArrayItems.push_back(Obj);
+	}
+	Set(Root, "narratives", Narratives);
+
+	return CanonicalJsonStringify(*Root);
+}
+
+std::string FInsimulContentLibrary::ProjectionIntegrity() const {
+	return Sha256Hex(CanonicalProjection());
 }
 
 } // namespace insimul

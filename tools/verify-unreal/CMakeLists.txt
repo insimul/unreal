@@ -121,3 +121,15 @@ target_compile_definitions(insimul_verify_content_library PRIVATE
 )
 target_compile_options(insimul_verify_content_library PRIVATE ${WARN_FLAGS})
 add_test(NAME content_library COMMAND insimul_verify_content_library)
+
+# ── Content-library round-trip parity host tests (US-IM2) ──
+add_executable(insimul_verify_content_roundtrip
+    test_content_roundtrip.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_content_roundtrip PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_content_roundtrip PRIVATE
+    INSIMUL_CONTENT_DIR="${CONTENT_DIR}"
+)
+target_compile_options(insimul_verify_content_roundtrip PRIVATE ${WARN_FLAGS})
+add_test(NAME content_roundtrip COMMAND insimul_verify_content_roundtrip)
