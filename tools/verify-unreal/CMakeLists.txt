@@ -26,6 +26,7 @@ set(PORTABLE_SOURCES
     "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
     "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
     "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulContentLibrary.cpp"
     "${RUNTIME_DIR}/Portable/InsimulBootstrap.cpp"
 )
 
@@ -37,6 +38,10 @@ endif()
 set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/quests")
 if(NOT EXISTS "${QUESTS_DIR}")
   set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/quests")
+endif()
+set(CONTENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/content")
+if(NOT EXISTS "${CONTENT_DIR}")
+  set(CONTENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/content")
 endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
@@ -104,3 +109,27 @@ target_compile_definitions(insimul_verify_bootstrap PRIVATE
 )
 target_compile_options(insimul_verify_bootstrap PRIVATE ${WARN_FLAGS})
 add_test(NAME bootstrap COMMAND insimul_verify_bootstrap)
+
+# ── Content-library import host tests (US-IM1) ──
+add_executable(insimul_verify_content_library
+    test_content_library.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_content_library PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_content_library PRIVATE
+    INSIMUL_CONTENT_DIR="${CONTENT_DIR}"
+)
+target_compile_options(insimul_verify_content_library PRIVATE ${WARN_FLAGS})
+add_test(NAME content_library COMMAND insimul_verify_content_library)
+
+# ── Content-library round-trip parity host tests (US-IM2) ──
+add_executable(insimul_verify_content_roundtrip
+    test_content_roundtrip.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_content_roundtrip PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_content_roundtrip PRIVATE
+    INSIMUL_CONTENT_DIR="${CONTENT_DIR}"
+)
+target_compile_options(insimul_verify_content_roundtrip PRIVATE ${WARN_FLAGS})
+add_test(NAME content_roundtrip COMMAND insimul_verify_content_roundtrip)

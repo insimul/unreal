@@ -1,0 +1,6 @@
+{
+  "description": "Cross-engine round-trip vectors (US-IM2). SHA-256 hex of the canonical semantic projection each engine's importer produces from the paired source library. Byte-portable across the TS/Unity/Unreal runtimes — every engine must reproduce these exact hashes.",
+  "vectors": {
+    "library-basic.json": "37d9f630ec12f044b0f9403661ea51c214877b0087b493488abf79673d0ee4ef"
+  }
+}

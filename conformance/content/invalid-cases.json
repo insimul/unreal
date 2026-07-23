@@ -1,0 +1,56 @@
+{
+  "area": "content-library",
+  "description": "Schema-validation rejection cases for the content-library importer. Each library MUST be rejected with an error whose message contains `expectedErrorContains`. Language-neutral so every engine's importer runs the same cases.",
+  "cases": [
+    {
+      "name": "root-not-object",
+      "library": [],
+      "expectedErrorContains": "not a JSON object"
+    },
+    {
+      "name": "missing-schema-version",
+      "library": { "id": "lib", "name": "Lib" },
+      "expectedErrorContains": "schemaVersion"
+    },
+    {
+      "name": "unsupported-schema-version",
+      "library": { "schemaVersion": 99, "id": "lib", "name": "Lib" },
+      "expectedErrorContains": "unsupported"
+    },
+    {
+      "name": "missing-id",
+      "library": { "schemaVersion": 1, "name": "Lib" },
+      "expectedErrorContains": "missing required \"id\""
+    },
+    {
+      "name": "missing-name",
+      "library": { "schemaVersion": 1, "id": "lib" },
+      "expectedErrorContains": "missing required \"name\""
+    },
+    {
+      "name": "item-missing-id",
+      "library": { "schemaVersion": 1, "id": "lib", "name": "Lib", "items": [ { "name": "Nameless" } ] },
+      "expectedErrorContains": "items[0]"
+    },
+    {
+      "name": "quest-missing-id",
+      "library": { "schemaVersion": 1, "id": "lib", "name": "Lib", "quests": [ { "name": "Q" } ] },
+      "expectedErrorContains": "quests[0]"
+    },
+    {
+      "name": "character-missing-id",
+      "library": { "schemaVersion": 1, "id": "lib", "name": "Lib", "characters": [ { "firstName": "A" } ] },
+      "expectedErrorContains": "characters[0]"
+    },
+    {
+      "name": "town-missing-id",
+      "library": { "schemaVersion": 1, "id": "lib", "name": "Lib", "towns": [ { "name": "T" } ] },
+      "expectedErrorContains": "towns[0]"
+    },
+    {
+      "name": "narrative-missing-id",
+      "library": { "schemaVersion": 1, "id": "lib", "name": "Lib", "narratives": [ { "title": "N" } ] },
+      "expectedErrorContains": "narratives[0]"
+    }
+  ]
+}
