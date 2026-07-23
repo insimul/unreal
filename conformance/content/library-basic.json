@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "conformance-basic",
+  "name": "Conformance Basic Library",
+  "description": "The shared content-library conformance fixture. A portable, world-independent bundle of authored content every engine's importer materializes into native entities.",
+  "targetLanguage": "es",
+  "items": [
+    { "id": "item-sword", "name": "Iron Sword", "itemType": "weapon", "description": "A plain iron blade.", "value": 25 },
+    { "id": "item-potion", "name": "Healing Potion", "itemType": "consumable", "description": "Restores vigor.", "value": 8 },
+    { "id": "item-map", "name": "Old Map", "itemType": "quest", "description": "A faded map of the coast.", "value": 0 }
+  ],
+  "quests": [
+    {
+      "id": "quest-lost-map",
+      "name": "The Lost Map",
+      "description": "Recover the old map from the tavern.",
+      "giverNpcId": "char-mira",
+      "status": "available",
+      "content": "quest(quest_lost_map, objective(fetch(item_map))).",
+      "questType": "fetch",
+      "difficulty": "easy",
+      "targetLanguage": "es"
+    },
+    {
+      "id": "quest-first-word",
+      "name": "First Word",
+      "description": "Greet the merchant in the target language.",
+      "giverNpcId": "char-tomas",
+      "status": "available",
+      "content": "quest(quest_first_word, objective(speak(greeting))).",
+      "questType": "dialogue",
+      "difficulty": "easy",
+      "targetLanguage": "es"
+    }
+  ],
+  "characters": [
+    { "id": "char-mira", "firstName": "Mira", "lastName": "Vega", "gender": "female", "occupation": "innkeeper", "currentLocation": "town-puerto", "isAlive": true },
+    { "id": "char-tomas", "firstName": "Tomás", "lastName": "Ruiz", "gender": "male", "occupation": "merchant", "currentLocation": "town-puerto", "isAlive": true }
+  ],
+  "towns": [
+    { "id": "town-puerto", "name": "Puerto Viejo", "settlementType": "town", "population": 1200, "countryId": "country-costa" },
+    { "id": "town-monte", "name": "Monte Alto", "settlementType": "village", "population": 340, "countryId": "country-costa" }
+  ],
+  "narratives": [
+    { "id": "narr-intro", "title": "Arrival", "body": "You step off the boat onto the salt-worn planks of Puerto Viejo.", "language": "es" },
+    { "id": "narr-market", "title": "The Market", "body": "Tomás waves you toward his stall, a greeting on his lips.", "language": "es" }
+  ]
+}
