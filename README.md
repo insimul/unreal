@@ -167,6 +167,11 @@ And the reference documents at the repository root:
 - **[`VERIFICATION.md`](VERIFICATION.md)** — the human in-editor verification
   checklists for the parts that need a real Unreal editor to test (the Prolog
   subsystem, the full gameplay loop, the editor panels, scene generation).
+- **[`RUNTIME_CORE_ADOPTION.md`](RUNTIME_CORE_ADOPTION.md)** — the adoption plan
+  for the shared runtime core (`@insimul/core`): what this plugin already
+  implements that core also implements, what core expects from a host and how
+  much of it exists here, how C++ reaches TypeScript, and which slice is adopted
+  first.
 
 ## License
 

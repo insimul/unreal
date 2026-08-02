@@ -1,13 +1,24 @@
-# Content-library conformance corpus
+# Content-library conformance corpus (LOCAL — not a mirror)
 
-Vendored mirror of `@insimul/core` `packages/core/conformance/content/` (source of
-truth). Language-neutral, data-only fixtures that pin the **content-library import
-contract** — the portable, world-independent bundle of authored content (items,
-quests, characters, towns, narratives) every native engine's importer materializes
-into the same entity set.
+**These fixtures are this repository's own.** They are declared `local` in
+`../VENDORED.json` and mirror nothing.
 
-This is the shared half of the author-once/use-anywhere proof: the Unreal leg lives
-in `Source/InsimulRuntime/Portable/InsimulContentLibrary.{h,cpp}` and is exercised by
+Until tasklist 99's US-3 this file opened by calling itself a "vendored mirror of
+`packages/core/conformance/content/`". There is no such directory in core and
+there never was — the claim went unchecked because nothing compared the corpus to
+its supposed source (see `../VENDORED.md`). Core's shared content-library golden
+is **`../content-library/*.json`**, which is now mirrored beside this directory
+and is a *different, current* shape: a `manifest.contractVersion` envelope rather
+than the top-level `schemaVersion` document described below. The two are **not
+interchangeable**; reconciling `FInsimulContentLibrary` onto core's shared golden
+is content-portability work, not runtime-core adoption, and is deliberately not
+attempted in tasklist 99.
+
+Language-neutral, data-only fixtures that pin **this engine's** content-library
+import contract — the portable, world-independent bundle of authored content
+(items, quests, characters, towns, narratives) the importer materializes into a
+native entity set. The Unreal leg lives in
+`Source/InsimulRuntime/Portable/InsimulContentLibrary.{h,cpp}` and is exercised by
 `tools/verify-unreal/test_content_library.cpp` against these files.
 
 ## Files
