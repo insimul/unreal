@@ -1,4 +1,14 @@
 { "name": "insimul-unreal-tooling", "private": true, "type": "module",
-  "scripts": { "check": "node verify-unreal/check.mjs",
+  "comment": [
+    "`check` is the toolchain-free gate — a structural scan plus the corpus",
+    "manifest. `check:host` compiles the PORTABLE slice of the runtime module",
+    "and runs it against the golden fixtures; it needs only cmake and a C++17",
+    "compiler (no Unreal, no UBT), so the merge gate runs it too. It drops the",
+    "libinsimulcore legs with a configure-time WARNING when no native build is",
+    "beside it — read that warning rather than the pass count."
+  ],
+  "scripts": { "check": "node verify-unreal/check.mjs && node vendor-conformance.mjs --check",
                "check:corpus": "node vendor-conformance.mjs --check",
+               "check:host": "cmake -S verify-unreal -B verify-unreal/build && cmake --build verify-unreal/build && ctest --test-dir verify-unreal/build --output-on-failure",
+               "check:full": "npm run check && npm run check:host",
                "vendor:conformance": "node vendor-conformance.mjs" } }
