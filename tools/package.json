@@ -1,2 +1,4 @@
 { "name": "insimul-unreal-tooling", "private": true, "type": "module",
-  "scripts": { "check": "node verify-unreal/check.mjs" } }
+  "scripts": { "check": "node verify-unreal/check.mjs",
+               "check:corpus": "node vendor-conformance.mjs --check",
+               "vendor:conformance": "node vendor-conformance.mjs" } }

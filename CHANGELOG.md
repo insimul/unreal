@@ -12,6 +12,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Quest-parity diff — `quest_parity` / `quest_parity_core` (US-3 of 99).** Two
+  new `tools/verify-unreal` ctest targets that run the shared quest corpus
+  (`conformance/quests/{hydration,radiant}-cases.json`, 4 + 3 cases) through
+  **three legs** — the committed golden, this plugin's hand-ported
+  `FInsimulQuestSystem`, and `@insimul/core` through `libinsimulcore` — reduced
+  to a canonical string by the same C++ serializer so a surviving difference is
+  semantic rather than a formatting artifact. Every case is classified
+  AGREE / SHAPE / FIX / REGRESSION / UNGOLDENED; the last two fail the build.
+  **Result: 7 AGREE, 0 of everything else** — the hand-port and core agree
+  completely on the surface the corpus covers. The classifier is self-tested over
+  five synthetic triples (5/5 verdicts reachable) so that result is a finding
+  rather than the only thing the gate can say. `quest_parity` runs the corpus and
+  hand-port legs plus the self-test with no native library, so a standalone clone
+  still gates something.
+  - `quest.hydrate` / `quest.radiantTick` are **comparison surfaces, not adopted
+    ones**: nothing in `Source/` calls them, and `FInsimulQuestSystem` remains
+    what ships. Agreement is the evidence a future retirement would need, not the
+    retirement.
+- **Vendored conformance corpus re-vendored, and now guarded (US-3 of 99).** The
+  corpus described itself as a byte-for-byte mirror of
+  `packages/core/conformance/` and was not one — measured at **41 of core's 76**
+  Prolog cases, missing the entire KINP pack, with a pre-KINP `gameplay.json`,
+  and with `content/*` claiming to mirror a core directory that does not exist.
+  Re-vendored to **34 files / 76 Prolog cases**, byte-identical to the source and
+  to the set the Godot adapter carries (same files, same 34 hashes).
+  - `tools/vendor-conformance.mjs` (`npm run vendor:conformance`,
+    `npm run check:corpus`) — a deliberate port of Godot's script of the same
+    name rather than a second mechanism. `--check` verifies every mirrored file
+    against the sha256 in the new `conformance/VENDORED.json`, counts the Prolog
+    cases, and rejects any file that is neither mirrored nor *declared local*; it
+    needs no core checkout, so it runs as the **`corpus_manifest`** ctest target.
+    `--core` does the real byte-for-byte diff against a core checkout. The drift
+    happened because nothing ever ran that diff.
+  - Newly mirrored: `prolog/{identity,equivalence,worlds}.json` (the KINP pack,
+    34 cases), `predicate-schema-hash.json`, `content-library/*.json`.
+  - `conformance/content/*` is now **declared local** and its README says so.
+    Core's shared content-library golden (`content-library/*.json`) is a
+    different, current shape and now sits beside it; reconciling
+    `FInsimulContentLibrary` onto it is content-portability work, not runtime-core
+    adoption, and was not attempted.
+- **`RUNTIME_CORE_ADOPTION.md` §10 — the US-3 parity report.** What the adopted
+  slice proves (11/11 radiant vectors, unreduced), what the corpus looked like
+  before and after, both implementation diffs with their classifications, the
+  retain/remove decision with reasons, and the honest gaps. Nothing was removed:
+  `ERadiantSource::None` and `Portable/InsimulQuestSystem.cpp` are both retained
+  explicitly — neither is superseded, and `None` is now load-bearing evidence
+  that the adoption is a strict capability gain.
 - **Radiant quest *generation* — the first adopted slice of `@insimul/core`
   (US-2 of 99).** This plugin now *calls* core's generator instead of shipping
   none: `UInsimulRadiantSourceShell::GenerateQuests()` turns radiant templates

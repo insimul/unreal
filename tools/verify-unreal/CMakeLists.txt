@@ -236,6 +236,26 @@ if(CORE_LIB)
   # Order matters for static archives: libinsimulcore.a calls into libinsimul.a.
   target_link_libraries(insimul_verify_radiant_bridge PRIVATE "${CORE_LIB}" "${INSIMUL_LIB}")
   add_test(NAME radiant_bridge COMMAND insimul_verify_radiant_bridge --source core)
+
+  # ── the three-leg quest parity diff (US-3) ────────────────────────────────
+  add_executable(insimul_verify_quest_parity_core
+      test_quest_parity.cpp
+      ${PORTABLE_SOURCES}
+      "${RUNTIME_DIR}/Private/Core/InsimulCoreBridge.cpp"
+  )
+  target_include_directories(insimul_verify_quest_parity_core PRIVATE
+      ${INCLUDE_DIRS}
+      "${RUNTIME_DIR}/Private/Core"
+      "${CORE_ABI_INCLUDE}"
+  )
+  target_compile_definitions(insimul_verify_quest_parity_core PRIVATE
+      INSIMUL_QUESTS_DIR="${QUESTS_DIR}"
+      INSIMUL_HAVE_CORE_BRIDGE=1
+      INSIMUL_WITH_CORE=1
+  )
+  target_compile_options(insimul_verify_quest_parity_core PRIVATE ${WARN_FLAGS})
+  target_link_libraries(insimul_verify_quest_parity_core PRIVATE "${CORE_LIB}" "${INSIMUL_LIB}")
+  add_test(NAME quest_parity_core COMMAND insimul_verify_quest_parity_core --core)
 else()
   # NOT a silent skip. The bridge is the whole point of the adoption, so its
   # absence is reported at configure time with the exact fix — but it is a
@@ -244,12 +264,55 @@ else()
   # no insimul-native beside it. radiant_source (the stub leg) still runs and
   # still gates the translation site.
   message(WARNING
-      "radiant_bridge NOT built: no libinsimulcore.a + libinsimul.a found.\n"
+      "radiant_bridge + quest_parity_core NOT built: no libinsimulcore.a + libinsimul.a found.\n"
       "  The full-stack radiant gate (11 corpus vectors through core's real\n"
-      "  TypeScript) will NOT run. The stub leg (radiant_source) still does.\n"
-      "  To build it, in an insimul-native checkout:\n"
+      "  TypeScript) and the three-leg quest parity diff will NOT run. The stub\n"
+      "  leg (radiant_source) and the two-leg quest_parity still do.\n"
+      "  To build them, in an insimul-native checkout:\n"
       "      cmake -S . -B build && cmake --build build\n"
       "  then re-configure with:\n"
       "      cmake -S tools/verify-unreal -B build -DINSIMUL_NATIVE_DIR=/path/to/native\n"
       "  Searched: ${_native_candidates}")
+endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Quest parity — the two-implementation diff US-3's third criterion asks for
+# (RUNTIME_CORE_ADOPTION.md §10.3). FInsimulQuestSystem is a hand-port of core's
+# quest hydration and radiant tick; both are pinned by conformance/quests/.
+#
+#   quest_parity       always built. Legs: corpus + the hand-port, plus the
+#                      classifier self-test. Gates the corpus floors and proves
+#                      all five verdicts are reachable with no native library.
+#   quest_parity_core  built with libinsimulcore (above). Adds core's leg and
+#                      is where the classification is actually produced.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_quest_parity
+    test_quest_parity.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_quest_parity PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_quest_parity PRIVATE
+    INSIMUL_QUESTS_DIR="${QUESTS_DIR}"
+)
+target_compile_options(insimul_verify_quest_parity PRIVATE ${WARN_FLAGS})
+add_test(NAME quest_parity COMMAND insimul_verify_quest_parity)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The vendored-corpus drift guard (US-3 criterion 4). Every gate above reads
+# conformance/, and until this story nothing checked that conformance/ was still
+# the corpus it claims to mirror — it had rotted to 41 of core's 76 Prolog cases.
+# --check needs no core checkout, so it runs here; add --core for the real
+# byte-for-byte diff (see conformance/VENDORED.md).
+# ─────────────────────────────────────────────────────────────────────────────
+
+find_program(NODE_EXECUTABLE NAMES node nodejs)
+if(NODE_EXECUTABLE)
+  add_test(NAME corpus_manifest
+      COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../vendor-conformance.mjs" --check)
+else()
+  message(WARNING
+      "corpus_manifest NOT registered: no `node` on PATH, so the vendored corpus\n"
+      "  drift guard will not run. Install Node and re-configure, or run it by\n"
+      "  hand:  node tools/vendor-conformance.mjs --check")
 endif()

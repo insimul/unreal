@@ -809,6 +809,206 @@ libinsimul KB-lifecycle crash (§6.7, belongs in `native/`).
 
 ---
 
+## 10. US-3 — the parity report
+
+Written after the fact, from command output. Every number below is printed by
+something in Appendix B and was green on this machine at the time of writing.
+
+```
+cmake -S tools/verify-unreal -B build && cmake --build build
+ctest --test-dir build --output-on-failure     # 12/12
+node tools/verify-unreal/check.mjs             # 392 files structurally sound
+```
+
+### 10.1 The adopted slice against the corpus
+
+`ctest -R radiant_bridge` → **11 of 11 radiant vectors pass** through core's real
+TypeScript, unreduced: the same five files packages/core's own runner reads,
+byte-identical to the source copy — asserted by §10.2's guard now, not by
+inspection.
+
+The count is asserted, not merely printed (US-3's second criterion). The gate
+fails if the corpus directory is empty, if fewer than 11 cases run, if any of the
+five areas is missing, if two cases share a name, or if the bundle no longer
+exposes `radiant.generate`. US-2 verified those refusals by construction; this
+story added the same discipline to the new gates below.
+
+| ctest target | before US-3 | after |
+| --- | --- | --- |
+| `radiant_bridge` / `radiant_source` / `radiant_source_none` | 11 cases, floors on files, cases, areas, names | unchanged |
+| `quest_parity` | did not exist | **7 cases**, two legs + the classifier self-test, floors on both areas |
+| `quest_parity_core` | did not exist | **7 cases**, three legs — where the classification is produced |
+| `corpus_manifest` | did not exist | **34 files hash-checked**, 76 Prolog cases counted |
+| the six pre-existing targets | 228 checks | unchanged |
+
+### 10.2 The corpus is byte-identical again — it was not
+
+§6.3 predicted this criterion would be **known-failing**, and it was. Re-vendored
+from `packages/core` with `tools/vendor-conformance.mjs --core`:
+
+| | before | after |
+| --- | --- | --- |
+| mirrored files | 27, unverified | **34, hash-pinned** |
+| `prolog/` cases | 41 of 76 (54%) | **76 (100%)** |
+| KINP `identity` / `equivalence` / `worlds` | absent | present (34 cases) |
+| `prolog/gameplay.json` | 7 cases, pre-KINP atoms | 8 cases, `id/3` terms |
+| `predicate-schema-hash.json`, `content-library/` | absent | mirrored |
+| `README.md` | described tau-prolog as a second engine | current (carries the `[AMEND]` table) |
+| `content/*` | claimed to mirror a core dir that does not exist | **declared local**, README corrected |
+
+**The guard matters more than the copy.** `tools/vendor-conformance.mjs` is a
+deliberate port of Godot's script of the same name — identical manifest shape,
+identical flags — because the program's whole point is one mechanism rather than
+three lookalikes, the same reasoning that made §4 bind `libinsimulcore` instead of
+inventing a second bridge. `--check` verifies every mirrored file against the
+sha256 in `conformance/VENDORED.json` and rejects any file that is neither
+mirrored nor *declared local*; it needs no core checkout, so it runs as the
+`corpus_manifest` ctest target. Adding `--core` does the real byte-for-byte diff.
+The rot happened because nothing ever ran that diff.
+
+Cross-checked against Godot: the 34 mirrored files here and the 34 there are the
+**same set with the same 34 hashes**. That is what "one corpus, three runtimes"
+was supposed to mean and, until this story, did not.
+
+The declared-local half matters as much. `conformance/content/*` opened its own
+README by calling itself a mirror of `packages/core/conformance/content/`, a
+directory core does not have. Core's shared content-library golden is
+`content-library/*.json` — a *different and current* shape
+(`manifest.contractVersion` versus a top-level `schemaVersion`) — now mirrored
+beside it. They are not interchangeable; reconciling `FInsimulContentLibrary`
+onto the shared golden is content-portability work, not runtime-core adoption,
+and is deliberately out of scope here.
+
+**What re-vendoring did NOT buy.** §6.3's first finding stands: nothing in this
+repo reads `conformance/prolog/` — 76 correct cases are still 76 inert files. The
+guard keeps them honest; it does not execute them. Standing up a Prolog
+conformance runner over `libinsimul` is now cheap (the harness links it, §10.1)
+and is the obvious next story, but it adopts no core surface and so was not
+smuggled into this one.
+
+### 10.3 The two-implementation diff, and the classification
+
+Two diffs, because the honest one is weak and the useful one is cheap.
+
+**Diff 1 — the adopted slice vs what shipped** (`ctest -R radiant_source_none`).
+This engine never generated radiant quests (§6.2), so the pre-adoption leg emits
+nothing. All 11 vectors classify:
+
+| | cases | meaning |
+| --- | --- | --- |
+| AGREE | 4 | the corpus expects zero quests; both legs produce zero |
+| **GAIN** | **7** | core produces quests where this engine produced none |
+| REGRESSION | 0 | not constructible — the old leg emits nothing at all |
+
+"Not constructible" is **asserted** rather than argued: the leg fails if the
+pre-adoption path ever produces a quest, and it fails if GAIN is zero (which would
+mean the comparison had quietly stopped comparing). Godot's adapter reports the
+identical 4/7/0 over the same vectors — an independent implementation agreeing is
+worth more than either number alone.
+
+**Diff 2 — hand-ported C++ vs core, over identical vectors**
+(`ctest -R quest_parity_core`, the diff §5.3 promised).
+`Portable/InsimulQuestSystem.cpp` (option D, §4.4) implements quest hydration and
+the radiant tick; core implements both; `conformance/quests/{hydration,radiant}-cases.json`
+pins both. Three legs — committed corpus, the hand-port, core through
+libinsimulcore — reduced to a canonical string by the **same** C++ serializer
+(`CanonicalJsonStringify` for hydration, `CanonicalFactList` for the tick), so a
+surviving difference is semantic and never a formatting artifact.
+
+```
+classifier self-test: 5/5 verdicts reachable
+7 case(s) executed: 4 hydration + 3 radiant
+classification: 7 AGREE, 0 SHAPE, 0 FIX, 0 REGRESSION, 0 UNGOLDENED
+```
+
+**Result: total agreement. Zero differences to classify, and therefore zero
+regressions — the classification US-3's third criterion asks for is empty because
+there is nothing in it, not because nothing was compared.**
+
+The five verdicts map onto the criterion's three words plus two the criterion does
+not name but the data can produce:
+
+| verdict | meaning | fatal |
+| --- | --- | --- |
+| AGREE | port ≡ core ≡ corpus | — |
+| SHAPE | differ only in fact **emit order**, which the corpus declares insignificant | no — this is "tolerable shape change" |
+| FIX | differ semantically; **core** matches the corpus | no — adopting corrects a port bug |
+| REGRESSION | differ semantically; the **port** matches the corpus | **yes** |
+| UNGOLDENED | differ semantically and **neither** matches the corpus | **yes** |
+
+`UNGOLDENED` is the case US-3's wording does not cover: two implementations can
+disagree while the golden describes a third thing, and calling that a "regression"
+would misreport it. It also catches the subtler failure where both legs agree with
+each other and *neither* agrees with the corpus — that must not read as AGREE just
+because the two legs match, and a self-test case asserts it does not.
+
+**The classification is a finding, not the classifier's only possible output.**
+Before reading the corpus the gate runs its classifier over five synthetic triples
+and asserts all five verdicts are reachable. That was not taken on trust either —
+each verdict was also driven out of the *real* code:
+
+| perturbation | verdict produced |
+| --- | --- |
+| `RadiantTick` returns its facts reversed | 2 × SHAPE (non-fatal, reported) |
+| `RadiantTick` picks candidates in descending id order | 1 × FIX + 1 × SHAPE |
+| …and the corpus edited to match that broken port | 1 × **REGRESSION**, exit 1 |
+| a corpus `expected` fact tampered with | 1 × **UNGOLDENED**, exit 1 |
+| the corpus directory emptied | "the gate executed ZERO cases", exit 1 |
+
+`corpus_manifest` was proved the same way: mutating a mirrored file, deleting one,
+adding an undeclared file under a mirrored directory, and pointing `--core` at a
+source tree with one changed and one extra file each produced a named failure and
+exit 1.
+
+**What this is evidence for:** the hand-port is faithful on the surface the corpus
+covers, and a future tasklist could retire it in favour of core without behaviour
+change **on that surface**. **What it is not evidence for:** the corpus covers 4
+hydration cases and 3 tick cases, while `InsimulQuestSystem.cpp` is 650 lines
+including query-driven completion and fact-asserting transitions that no shared
+vector touches. Agreement here does not license deleting it — see §10.4.
+
+Two things worth recording about the core leg. `quest.hydrate` and
+`quest.radiantTick` are **comparison surfaces, not adopted ones** — core's own
+bundle entry point says so — so nothing in `Source/` calls them and the gate
+builds its own request documents rather than routing through an adapter. There is
+no adapter to route through, and adding one would adopt surface US-2 did not.
+Unlike Godot, this leg needed **no new adapter module** to reach core: `js/host-crypto.js`
+(§8 amendment 4) was already in the bundle this repo links.
+
+### 10.4 What was removed, and what was retained
+
+US-3's last criterion: *remove the superseded implementation, or retain it
+explicitly with a reason.* **Nothing was removed.** Both retentions are deliberate,
+and both match the conclusion Godot reached independently.
+
+| thing | decision | reason |
+| --- | --- | --- |
+| `insimul::ERadiantSource::None` | **retained** | It is not a superseded implementation. There is no second implementation of radiant generation — `None` is the *off* setting, and a game that wants no procedurally generated quests still needs it. It is also the documented fallback on a platform with no `libinsimulcore` (§4.7.2). And it is now load-bearing evidence: the 4/7/0 classification in §10.3 is what keeps "strict capability gain" a machine-checked claim rather than a remembered one, and deleting the leg would delete the check. |
+| `Portable/InsimulQuestSystem.cpp` (option D) | **retained** | US-2 adopted radiant *generation* only. Quest hydration and the radiant tick were never adopted, so this is not superseded by anything shipped — §5.3 was explicit that the diff "adds no adopted surface". Retiring a passing 650-line implementation on the strength of 7 agreeing vectors would be retiring it on evidence covering a fraction of it. |
+
+The retention of option D is **not** an endorsement of option D. §4.4 and §7 stand:
+do not extend the hand-port to new core surface. This story's job was to produce
+the evidence a future retirement will need, and it did.
+
+### 10.5 The honest gaps
+
+- **No Unreal build ran.** Unchanged from US-1 §6.4 and US-2: the Unreal Build
+  Tool is not available in this harness, so `Public/InsimulRadiantSourceShell.h`,
+  `Private/Core/InsimulRadiantSourceShell.cpp` and every other UE-coupled file are
+  **structural-syntax-gated only**. Nothing in this story added UE-coupled code.
+- **`Source/InsimulRuntime/Tests/` and `Source/InsimulEditor/Tests/` still have no
+  build wiring** — 13 files / 4,738 lines that no gate compiles (§6.4). Wiring
+  them is real work and is still not done.
+- **`conformance/prolog/` is correct now and still unread** (§10.2).
+- **`conformance/ui/` is mirrored and only reachable through those unwired test
+  files**, so its vectors are in the same position as `prolog/`'s.
+- The three-leg diff and the full radiant gate need an `insimul-native` checkout.
+  Without one, `ctest` runs **10 of 12** targets and CMake says so loudly at
+  configure time; it is a warning rather than an error because this repo is
+  standalone by design. Verified by rsync'ing the repo away from any sibling.
+
+---
+
 ## Appendix A — `docs/UNIFICATION_ROADMAP.md` Decision 1
 
 That file lives in the **project checkout**, outside this submodule, so this
@@ -863,10 +1063,11 @@ grep -rn 'conformance/radiant\|exclusion-cooldown\|maxquests\|single-slot\|multi
 # the prolog corpus has no readers either (§6.3)
 grep -rn 'conformance/prolog' . --exclude-dir=.git --exclude-dir=conformance --exclude-dir=node_modules
 
-# corpus drift (§6.3) — CORE is the packages/core checkout
+# corpus drift (§6.3) — CORE is the packages/core checkout. These are the raw
+# measurements US-1 made; US-3 replaced them with a guard (see below).
 diff -rq conformance/ "$CORE/conformance/"
 node -e "const fs=require('fs');let t=0;for(const f of fs.readdirSync('conformance/prolog'))
-  t+=JSON.parse(fs.readFileSync('conformance/prolog/'+f,'utf8')).cases.length;console.log(t)"   # 41 (source: 76)
+  t+=JSON.parse(fs.readFileSync('conformance/prolog/'+f,'utf8')).cases.length;console.log(t)"   # was 41 (source: 76); now 76
 
 # the ABI header and its polarity (§6.6)
 diff Source/ThirdParty/InsimulLibrary/include/insimul.h "$NATIVE/include/insimul.h"   # identical
@@ -884,4 +1085,36 @@ grep -n '"engines' /path/to/project/package.json    # no matches
 # the bridge this plan binds (§4)
 ls "$NATIVE/corebridge"                             # include js src tools vendor CMakeLists.txt
 grep -n "'radiant\.\|'quest\." "$NATIVE/corebridge/js/entry.js"
+
+# ── US-3 (§10) ──────────────────────────────────────────────────────────────
+
+# every gate, after the story. 12/12 with an insimul-native checkout visible,
+# 10/12 + a loud configure warning without one.
+cmake -S tools/verify-unreal -B build && cmake --build build
+ctest --test-dir build --output-on-failure
+node tools/verify-unreal/check.mjs            # 392 files structurally sound
+
+# §10.1 the adopted slice, and §10.3 diff 1
+./build/insimul_verify_radiant_bridge --source core   # PASSED: 11 case(s), all 5 areas
+./build/insimul_verify_radiant_source --source none   # 4 AGREE, 7 GAIN, 0 REGRESSION
+
+# §10.3 diff 2 — the three-leg quest parity classification
+./build/insimul_verify_quest_parity_core --core       # 7 AGREE, 0 SHAPE/FIX/REGRESSION/UNGOLDENED
+./build/insimul_verify_quest_parity                   # two legs + the 5/5 classifier self-test
+
+# §10.2 the corpus guard. --check needs no core checkout (it is the
+# `corpus_manifest` ctest target); --core does the real byte diff.
+node tools/vendor-conformance.mjs --check                       # 34 files, 76 prolog cases
+node tools/vendor-conformance.mjs --check --core "$CORE"        # byte-identical
+node tools/vendor-conformance.mjs --core "$CORE"                # re-vendor + rewrite the manifest
+
+# §10.2 the cross-repo claim: same mirrored set, same hashes, as Godot carries
+node -e "const a=require('./conformance/VENDORED.json').files,
+  b=require('$GODOT/conformance/VENDORED.json').files, k=Object.keys(a).sort();
+  console.log(JSON.stringify(k)===JSON.stringify(Object.keys(b).sort()),
+              k.every(x=>a[x]===b[x]))"                          # true true
+
+# §10.4 what was retained, and how big it is
+wc -l Source/InsimulRuntime/Portable/InsimulQuestSystem.cpp      # 650
+grep -rn 'quest\.hydrate\|quest\.radiantTick' Source/            # no hits — comparison-only
 ```
