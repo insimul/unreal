@@ -148,8 +148,20 @@ confirming an already-proven sequence, not debugging it.
 These must all be green first — they gate the portable semantics the loop below
 exercises.
 
-- [ ] Host harness: `cd packages/unreal/tools/verify-unreal && cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
-      → 4/4 (`world_source`, `save_system`, `quest_system`, **`bootstrap`**).
+- [ ] Host harness: `cmake -S tools/verify-unreal -B build && cmake --build build && ctest --test-dir build --output-on-failure`
+      → 9/9: `world_source`, `save_system`, `quest_system`, `bootstrap`,
+      `content_library`, `content_roundtrip`, and the radiant-adoption gate
+      `radiant_source`, `radiant_source_none`, **`radiant_bridge`**.
+      `radiant_bridge` runs the 11 shared radiant vectors through the real
+      `@insimul/core` bundle and is the only target that needs a native library;
+      it is built only when an `insimul-native` checkout with
+      `build/libinsimulcore.a` + `build/libinsimul.a` is discoverable (a sibling
+      `native/`, or `-DINSIMUL_NATIVE_DIR=<dir>`). Without one, configure prints
+      a warning and you get **8/8** — the full stack was NOT exercised, so do not
+      record this checkbox as green.
+- [ ] Structural syntax gate: `node tools/verify-unreal/check.mjs` → all
+      git-tracked `.h`/`.cpp` under this repo structurally sound. It reads
+      `git ls-files`, so a new file must be **staged** before it is scanned.
 - [ ] Root type-check: `npm run check` → exit 0.
 - [ ] Root tests: `npm test` → all green (includes the save-integrity + quest
       drift guards that pin the C++ output to the TS authority).

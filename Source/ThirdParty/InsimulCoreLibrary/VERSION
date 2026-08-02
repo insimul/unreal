@@ -1,0 +1,5 @@
+insimulcore 0.1.0
+platform staged-at-package-time
+quickjs see insimul-native/corebridge/vendor/quickjs/VERSION
+core_commit 443cce783eddea790d4a1f07b90018047ca36845
+core_bundle_sha256 7b2a391997b180258369e1f73422251174090d88f7f3055867c7fd774c4934b6

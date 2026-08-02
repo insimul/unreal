@@ -8,6 +8,9 @@ Build/
 # Host-test harness build output (tools/verify-unreal)
 tools/verify-unreal/build/
 
+# FAB/Marketplace release staging (scripts/release/build-plugin-zip.mjs)
+dist/
+
 # IDE / generated project files
 *.VC.db
 *.opensdf

@@ -12,6 +12,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Radiant quest *generation* — the first adopted slice of `@insimul/core`
+  (US-2 of 99).** This plugin now *calls* core's generator instead of shipping
+  none: `UInsimulRadiantSourceShell::GenerateQuests()` turns radiant templates
+  plus current world facts into new quests, deterministically, from a seed. It is
+  a capability this engine did not have — not a replacement for anything. (Not to
+  be confused with the radiant *tick*, `FInsimulQuestSystem::RadiantTick`, which
+  *offers* already-authored radiant quests and is unchanged.)
+  - `Source/ThirdParty/InsimulCoreLibrary/` — a new `External` module publishing
+    `libinsimulcore` (the C ABI over `@insimul/core`), shaped exactly like the
+    existing `InsimulLibrary` module over libinsimul. `include/insimulcore.h` is
+    a byte-for-byte copy of the shipping header; `VERSION` records the QuickJS
+    pin and the **core commit compiled into the binary**. Desktop only — on a
+    platform with no build it defines `INSIMUL_WITH_CORE=0` and the plugin
+    compiles and runs without the bridge.
+  - `Private/Core/InsimulCoreBridge.{h,cpp}` — a UE-free RAII handle over that
+    ABI, mirroring `insimul::InsimulKB` over libinsimul. The **only** file in the
+    plugin that includes `insimulcore.h`; it marshals bytes and nothing else.
+  - `Portable/InsimulCoreCaller.h` (`ICoreCaller`, the JSON-in/JSON-out transport
+    seam, reusable by every later slice) and `Portable/InsimulRadiantSource.{h,cpp}`
+    (`FRadiantSource`) — the **single translation site** where engine types
+    become core's, `std`-only so it is host-testable under plain `clang++`.
+  - `Public/InsimulRadiantSourceShell.h` — the thin, game-thread-affine
+    `UCLASS`/Blueprint surface (`FInsimulGeneratedQuest`), pimpl'd so neither the
+    C ABI nor the portable headers leak downstream.
+  - Which implementation answers is **selectable**: `EInsimulRadiantSource::Core`
+    (through the bridge) or `None` (this plugin's pre-adoption behaviour, and the
+    fallback wherever `libinsimulcore` is absent).
+- **Radiant conformance gate — three new `tools/verify-unreal` ctest targets.**
+  All drive the shared corpus `conformance/radiant/*.json` (5 files / 11 cases —
+  the same unreduced vectors `packages/core` and the Godot adapter run) through
+  the adapter, asserting the executed-case count is non-zero and ≥ 11, that all
+  five areas are present, that case names are unique, and that the bundle still
+  exposes `radiant.generate`.
+  - `radiant_bridge` — the **full stack**: core's real TypeScript in QuickJS over
+    the natively linked libinsimul. **11/11 pass.** The first target in this
+    harness to link a native library at all; built when an `insimul-native`
+    checkout is discoverable (`-DINSIMUL_NATIVE_DIR=…`), and its absence is a
+    loud configure-time warning rather than a silent skip.
+  - `radiant_source` — the translation site over a recording stub, so it runs in
+    a standalone clone with no native library. Asserts the request document
+    byte-for-byte against an independently built expectation and answers in a
+    deliberately perturbed wire shape.
+  - `radiant_source_none` — the pre-adoption leg, classified rather than failed:
+    **4 AGREE / 7 GAIN / 0 REGRESSION**, matching the Godot adapter exactly.
 - **`RUNTIME_CORE_ADOPTION.md` — the shared-runtime-core adoption plan (US-1 of
   99).** A design document, no code: it reads `@insimul/core`'s runtime contract
   and restates it against this plugin's own types and lifecycle
