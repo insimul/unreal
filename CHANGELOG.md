@@ -12,6 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`RUNTIME_CORE_ADOPTION.md` — the shared-runtime-core adoption plan (US-1 of
+  99).** A design document, no code: it reads `@insimul/core`'s runtime contract
+  and restates it against this plugin's own types and lifecycle
+  (`FInsimulRuntimeContext::Boot()`, `UInsimulPrologSubsystem`, the portable
+  `std`-only cores), maps all five host hooks to what exists here / what must be
+  written / what has **no** counterpart, recommends adopt-or-keep for every
+  system this repo implements that core also implements (with the behavioural
+  differences called out), confirms the C-ABI language boundary already decided
+  by tasklist 100 and costs the Unreal-specific parts of binding
+  `libinsimulcore`, and chooses **radiant quest generation** as the first slice.
+  Also records what measurement contradicted: the vendored Prolog corpus is 41 of
+  core's 76 cases with a stale `gameplay.json`, `conformance/radiant/`'s 11
+  vectors have no reader, `VERIFICATION.md`'s `npm run engines:*` gates no longer
+  exist (13 test files / 4,738 lines have no build wiring here), and the
+  libinsimul ABI polarity trap that bit the Godot plugin does **not** exist in
+  this repo — the header is byte-identical to the shipping one and every call
+  site tests the correct polarity.
 - `VERSION` file alongside `Insimul.uplugin`, kept in sync with the manifest's
   `VersionName` and `VERSIONS.json` by `npm run engines:manifests`.
 - FAB/Marketplace release dry-run (`scripts/release/build-plugin-zip.mjs`): stages
