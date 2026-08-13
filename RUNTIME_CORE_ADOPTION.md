@@ -1009,6 +1009,566 @@ the evidence a future retirement will need, and it did.
 
 ---
 
+## 12. US-1 of 146 — the band-120 mechanic modules, host side
+
+Core landed nine modules and the seven of them in band 120–125 name **eight
+distinct host interfaces**. This story implemented all eight in this engine and
+found that **not one of them can be reached from C++ today**, because the
+`libinsimulcore` this repo builds against carries no mechanic rows. Both halves of
+that sentence matter, so both are written down: §12.1 is the measurement, §12.2 is
+what has to be answered before the rows can exist at all, and §12.4 is what the
+host half actually cost, gap by gap.
+
+Unity was the probe for this band (tasklist 145). Its `RUNTIME_CORE_ADOPTION.md`
+§12.6 named four things Unreal and Godot should copy rather than rediscover, and
+this story took all four. Where this engine's answer differs from Unity's, the
+difference is called out rather than smoothed over — §12.5 is the list.
+
+### 12.1 What the binary answers, measured
+
+`core.methods` is the only honest way to ask a build what it can do — not a version
+stamp, not a sibling checkout. Asked of the library this repo's gates link:
+
+```
+libinsimulcore 0.1.0 (quickjs 2025-04-26, core 247adfa23e394c65650b9813d882516c0fe25d1a)
+{"methods":["core.methods","quest.hydrate","quest.radiantTick",
+            "radiant.baseTemplates","radiant.generate"]}
+```
+
+Five methods. `radiant.*` is the first adopted slice (§5), `quest.*` is the parity
+surface (§10), `core.methods` is introspection. **No `combat.*`, no `perception.*`,
+no `traversal.*`, no `stamina.*`, no `skill.*`, no `equipment.*`, no `routine.*`.**
+
+`native/corebridge/js/entry.js` is 87 lines and says so in one screen, which is the
+design working as intended: *adding a method there is what adopting more of core
+means for this plugin.* Adoption of a mechanic module is a row plus a host
+implementation. **This story could only write the second half** — `native/` is a
+different repository and an Unreal worktree cannot edit it.
+
+The measurement is a **gate**, not a paragraph. `ctest mechanic_bridge`
+(`tools/verify-unreal/test_mechanic_hosts.cpp --bridge`, built only when
+libinsimulcore is found) asks the real library and pins the whole answer, so a
+mechanic row **arriving** fails as loudly as one disappearing — an arriving row
+means the host half must be re-checked against a real caller, and a gate that only
+noticed losses would let that land silently. It reports, per module,
+`BridgeHasNoRow` with the rows that are missing and a pointer to `entry.js`. The
+host half is implemented and **inert**, and `UInsimulMechanicHostBinder`'s boot log
+says so rather than letting a creator infer from a combat host that combat is wired.
+
+### 12.2 Three findings that have to be answered before the rows can be written
+
+These are the probe's output. Unity found all three; this engine confirms each from
+its own side, and **none of them is an engine problem** — all three land on whoever
+writes the rows.
+
+**1. Every host interface is a callback, and the C ABI has none.** Core's contract
+says a host interface is one *"the host implements and core calls"*
+(`module-contract.md` §2.4). In-process that is a function reference on
+`EngineHostAdapter`. Across `insimul_core_call(method, argsJson) -> json` there is
+nowhere for it to live: `insimulcore.h` is deliberately poll-only. So the direction
+has to invert — **readings in, orders out**:
+
+- Core already supports the inbound half where it matters most.
+  `DetectionTracker.observe({ tick, readings })` takes the host's readings directly,
+  which is how a headless world and the corpus drive that module. A
+  `perception.observe` row is a straight passthrough of what `IPerceptionProbe`
+  would have been asked for, gathered by the host first.
+- The outbound half has no analogue yet. `ILocomotionHost.travel` and
+  `ICombatSystem.applyDamage` are calls core *makes*; over the ABI they have to
+  become part of a **result** the host drains — `{ orders: [...] }` — with the host
+  reporting what became of them on the next call. That is a core-side design
+  decision, not an adapter's, and it is the single largest thing this band needs.
+- Two interfaces need nothing new. `ICombatStatSink` and `ISkillModifierSink` are
+  *told* absolute values, so the values can ride out in the result of the call that
+  produced them (`equipment.equip`, `skill.unlock`) and the host applies them. They
+  are the cheapest place to prove a row end to end when one lands.
+
+**2. The decision layers are stateful sessions, and a bridge call is not.**
+`CombatResolver`, `DetectionTracker`, `TraversalPlanner`, `StaminaPool`,
+`SkillProgression`, `EquipmentManager`, `RoutineDirector` each hold a registry,
+tuning, accumulated state and a `PrologEngine`. `radiant.generate` needed none of
+that — it is a pure function of a KB string — so the adopted surface has never had
+to answer "which instance?". A mechanic row must: `<module>.create` returning a
+handle, `<module>.<verb>` taking it, and `<module>.dispose`. That is why every row
+this repo proposes (§12.3) is a **pair**.
+
+For Unreal specifically the lifetime question already has an answer to copy.
+`UInsimulPrologSubsystem` holds one libinsimul KB per `GameInstance`, created in
+`Initialize` and released in `Deinitialize` (§1.4), and every mutating call asserts
+`IsInGameThread()`. A module handle must live and die exactly there. Unlike a
+garbage-collected host we know precisely when it dies, which makes `<module>.dispose`
+easy to place and mandatory to place.
+
+**3. Arrival is not a return value when a body takes seconds to move.** Core's
+`ILocomotionHost.travel` may return a `Promise<ArrivalReport>`, so a JS host awaits a
+walk. C++ here cannot: the portable layer is deliberately synchronous (§2.3 item 5)
+and the ABI cannot await a host at all. `templates/source/mechanics/InsimulLocomotionHost.cpp`
+answers with what it knows at the decision moment — a missing body, an unplaced
+destination, a pawn with no `AAIController`, or a path
+`AAIController::MoveToLocation` refuses is `arrived: false` *immediately*, and
+anything else dispatches the agent and reports `arrived: true` so world state moves
+at the decision moment and the body catches up. That is core's own documented
+no-host behaviour with an animation added, and it is deliberately not the
+alternative: reporting `arrived: false` for every movement that takes time would
+make `LocomotionDirector` count a successful walk as a failure and re-plan against
+it.
+
+### 12.3 The proposed row set — a proposal, and labelled as one
+
+`insimul::MechanicModules()` carries two rows per module, named after the decision
+layer's own entry point, so *"can this build reach the combat module"* is a
+checkable statement rather than a feeling. **Nothing in core promises these names.**
+It is byte-for-byte the table Unity proposed, deliberately: one proposal across the
+engines, not three. When the real rows land the table changes and the gate that pins
+it fails until it does.
+
+| module | proposed rows | what would cross |
+| --- | --- | --- |
+| combat | `combat.create`, `combat.attack` | attack request in; damage + fact delta out, plus the trajectory reading the host gathered first |
+| stamina | `stamina.create`, `stamina.spend` | actor + action atom in; amount charged and band out |
+| perception | `perception.create`, `perception.observe` | `readings[]` in (already core's shape); updates, transitions and belief out |
+| traversal | `traversal.create`, `traversal.traverse` | actor + destination + the host's passability reading in; affordance, cost and a locomotion order out |
+| skill | `skill.create`, `skill.unlock` | actor + node in; refusal or the whole new modifier set out |
+| equipment | `equipment.create`, `equipment.equip` | actor + item in; refusal or the recomputed `CombatStats` out |
+| routine | `routine.create`, `routine.tick` | clock + agents in; one `agent_goal/3` and any locomotion orders out |
+
+### 12.4 What the host half cost, and the gaps it did not paper over
+
+Eight interfaces, eight implementations, **no stubs** — `MODULE_HOSTS.json`'s
+`stubbed` map is empty, and the gate fails if an interface is both implemented and
+listed there. Five of them are narrower than the interface, and each says so where a
+reader will hit it rather than only here.
+
+| interface | where | the honest edge |
+| --- | --- | --- |
+| `ICombatSystem` | `mechanics/InsimulCombatHost.cpp` | `ExecuteAttack` **deliberately refuses** and warns once. Core never calls it; implementing it would be a second damage pipeline, and §2.3 item 1's "do not let the stub imply combat is wired" applies to a rolled `CalculateDamage` more than to anything else. `UCombatSystem::CalculateDamage` is left where it is and this class does not call it. |
+| `ICombatStatSink` | `mechanics/InsimulCombatHost.cpp` | §2.3 item 1 is now false in the good direction: there **is** an entity roster with `attackPower`/`defense`/`dodgeChance`, and it is the same roster `ApplyDamage` writes to, which is why both interfaces are one class. The contract's guess — "an `UAttributeSet` / GAS attribute write" — is still wrong for this plugin, which has no `GameplayAbilities` dependency; amendment 5 stands. |
+| `ISurvivalSystem` | `mechanics/InsimulSurvivalHost.cpp` | `Update(deltaTime)` is a **no-op by design** — `USurvivalSystem::Update` is a subsystem the game's own loop already ticks, and ticking it twice would be worse than not at all. It warns once so a game that wired core to drive the clock is told. `setOnNeedChanged` fires on the transitions the system announces, not per tick; nothing in core requires per-tick, so the narrower cadence is legitimate and stated. |
+| `ISkillModifierSink` | `mechanics/InsimulSkillModifierSink.cpp` | `move_speed` lands on `UCharacterMovementComponent::MaxWalkSpeed`, as a multiple of the actor's own authored base so re-applying the same absolute set is idempotent. **`carry_capacity` lands nowhere**: `InventorySystem.cpp` limits an inventory by `MaxSlots` and sums no weight, though `FInsimulItem` carries one. It is recorded and announced, not applied. |
+| `ITrajectoryProbe`, `IPerceptionProbe`, `ITraversalProbe` | `mechanics/InsimulGeometryProbes.cpp` | Real `LineTraceSingleByChannel` and `UNavigationSystemV1::NavigationRaycast` work, and `light_level/2` is an approximation: Unreal exposes no cheap per-point lightmap read at gameplay time, so it is an ambient floor plus a trace to the dominant `ADirectionalLight`. It is a measurement either way — what darkness is *worth* is authored. `stance` reports `standing` because this template has no crouch state to read, rather than guessing one from velocity. |
+| `ILocomotionHost` | `mechanics/InsimulLocomotionHost.cpp` | §12.2 finding 3. |
+
+Two things had to be built underneath all of it, and neither existed:
+`FInsimulActorRegistry` (atom → `AActor*`, and location atom → `FVector`, because
+core names `nessa` and `forge_gate` and a trace needs a body) and the combat roster
+above. `insimul::FInsimulMechanicHosts` holds the fallbacks core documents per
+interface — absent or unanswering reads as clear / no reading / passable / arrived —
+implemented **once**, on the host side, so four engines do not each guess.
+
+Two small additions were made outside `mechanics/` and are worth naming because they
+change files an exported game already ships. `USurvivalSystem` grew six accessors
+(`HasNeed`, `GetNeedIds`, `GetNeedMax`, `GetNeedDecayRate`, `IsNeedCritical`,
+`IsNeedWarning`) plus `SetEnabled`/`IsEnabled` and a `bEnabled` gate on `Update`,
+because `getNeed`, `getAllNeeds`, `setEnabled` and `isEnabled` are members of the
+interface core declares and none of them had a reader. And
+`UInsimulRadiantSourceShell` gained a non-reflected `GetCoreCaller()`, so the
+mechanic surface asks `core.methods` of the **one** libinsimulcore runtime this
+plugin already holds rather than starting a second QuickJS.
+
+### 12.5 Where this engine's answer differs from Unity's
+
+The probe's findings transferred; four details did not, and each is a property of
+the engine rather than of the contract.
+
+1. **"Must not throw" is a return type here, not a rule.** Unity wraps every probe
+   call in a `try`/`catch` because C# has exceptions. Unreal builds with
+   `bEnableExceptions` false, so a catch would be dead code in the shipping
+   configuration. Every probe in `InsimulMechanicContracts.h` returns `bool`
+   instead — `false` is "the host could not answer" — and the fallback for it lives
+   once, in `FInsimulMechanicHosts`. Core's documented degradations are unchanged;
+   only the mechanism for reaching them is.
+2. **`AddModifier` lands.** Unity had to forward `modifier.Id` as an authored
+   *preset* id and warn when the world had no such preset.
+   `USurvivalSystem::AddModifier(Id, NeedId, RateMultiplier, Duration)` takes the
+   whole modifier, so one core invents at runtime applies here.
+3. **The implementations are plain C++, not `UCLASS`es.** Only
+   `UInsimulMechanicHostBinder` is reflected. A `UCLASS` deriving from a namespaced
+   non-`UObject` base is a UHT risk this repo cannot compile-test (no UBT in this
+   harness, §6.4), and one Blueprint surface is what a creator actually wants.
+4. **The portable half is EXECUTED here.** Unity's equivalent C# runs only when a
+   human opens the editor. `ctest mechanic_hosts` drives the mirror, the fallbacks
+   and all four surface states under plain clang++ — 106 checks, no engine, no
+   native library. That is the one place this engine is ahead, and it is a property
+   of `Portable/` existing at all.
+
+### 12.6 What is gated, and what still is not
+
+`tools/verify-mechanics/check-mechanics.mjs` is in `npm run check` and pins the
+mirror three ways: every band-120 module's host interfaces and decision layers
+against `MODULE_HOSTS.json` (core's commit plus the sha256 of the three files it was
+derived from), every interface's member list against the C++ declaration, and every
+interface against *some* implementation — or an entry in `stubbed` with a stated
+consequence, which is what makes "no silent no-op" checkable. `--core <packages/core>`
+re-derives all of it from core's TypeScript, which is the only way to catch core
+having moved; four negative controls prove each check can fail. It excludes `tools/`
+and both `Tests/` trees, because a test fixture that implements an interface is not
+an implementation of it. It is a **port of Unity's script of the same name** — one
+mechanism across the engine repos, the same discipline `vendor-conformance.mjs` is
+held to.
+
+`ctest mechanic_hosts` executes the portable half (106 checks) and `ctest
+mechanic_bridge` executes the measurement in §12.1 against the real library (120
+checks). `npm run check:host:binaries` is this harness's **`--require-binaries`**:
+`-DINSIMUL_REQUIRE_BINARIES=ON` turns the configure-time "no libinsimulcore found"
+warning into a hard failure, because a warning that reads as a pass is how this repo
+once believed it had gates it did not have (§6.4). Verified both ways: without the
+flag a native-free copy configures and warns; with it, configuration fails.
+
+What is **not** gated is everything in `templates/source/mechanics/` that touches
+Unreal. No gate here compiles a UE translation unit — the Unreal Build Tool and the
+engine headers are not available in this harness (§6.4), unchanged since US-1 of 99 —
+so the traces, the navmesh query, the `MoveTo` dispatch and the survival bridge are
+**structural-syntax-gated only**. VERIFICATION.md §0e is their human pass, and it is
+listed there rather than implied here.
+
+---
+
+## 13. US-2 of 146 — the band-120 corpora, vendored and executed
+
+Adopting a mechanic module brings **two** corpora, and they are in completely
+different states in this repo. Reporting one number for both is how a checked-in
+file passes for a gate, so this section reports them apart.
+
+| half | what it is | cases | runner here |
+| --- | --- | --- | --- |
+| **predicate** | `conformance/prolog/mechanic-*.json` — the modules' Prolog vocabulary | **125** (of 255 in the directory) | **ctest `prolog_corpus`**, all 255 |
+| **decision** | `conformance/{combat,items,routines,skills,stealth,traversal}/` — `CombatResolver`, `Market`, `DetectionTracker` … called with an input, diffed against an expected result | **212** | **none**, and §13.2 is why |
+
+### 13.1 What was vendored, and what was deliberately not
+
+`npm run vendor:conformance -- --core <packages/core>` mirrored **64 files** at
+core `76782e5`, up from 34. The seven band-120 decision areas and the ten new
+Prolog packs are the growth:
+
+```
+23 combat / 43 items / 255 prolog / 7 quests / 11 radiant /
+45 routines / 41 skills / 22 stealth / 38 traversal / 44 ui     = 529 cases
+```
+
+Five core-side prefixes are **not** mirrored, each with the reason printed on
+every `--core` run (`NOT_MIRRORED` in `tools/vendor-conformance.mjs`):
+
+| prefix | why not |
+| --- | --- |
+| `editor/` | editor-core adoption is a later wave (tasklist 101). This repo ships the runtime. |
+| `generation/` | the shipped `libinsimulcore` answers `core.methods` with no `generation.*` row. |
+| `ai/` | `agentAi` is out of band 120–125 — no host interface here implements it. Its predicate half **is** vendored and executed (`prolog/agent-ai.json`, 15 cases). |
+| `map/` | `map` is out of band 120–125. Its predicate half **is** vendored and executed (`prolog/geo-map.json`, 15 cases). |
+| `grounding/` | KGP pack *data* (tasklist 152) — no `cases` array, no golden vectors, and no grounding surface here to run them against. |
+
+Without that list, every corpus core adds for a surface this repo has not adopted
+reads as DRIFT and the real signal drowns. With it, an exclusion is a visible act
+with a count beside it, not a silence.
+
+**The manifest now guards a floor, not just a hash.** `VENDORED.json` grew
+`cases` (the exact per-area count of the checked-in tree, re-derived on every
+`--check`) and `caseFloor` (the largest count ever vendored, which does not drop
+on its own). Hashes alone cannot see a corpus *shrink*: a file whose `cases` array
+is trimmed and re-hashed passes every other check in that script. A re-vendor that
+would lower a floor fails and names the area; `--allow-corpus-shrink` is the
+explicit, visible act of accepting one. The mechanism, the flag names and the
+manifest keys are Unity's (tasklist 145 US-2), ported unchanged — one mechanism
+across the engine repos, not three lookalikes.
+
+### 13.2 The predicate half — executed, 255 of 255
+
+Before this story `conformance/prolog/` was checked for **provenance only**:
+present, hashed, byte-identical to core, and executed by nothing this repo can
+run. That is the same failure the corpus guard itself was written for, one level
+up — and it is why US-2's acceptance criterion says *a vendored corpus nothing
+runs is a checked-in file, which this repo has shipped before*.
+
+`tools/verify-unreal/test_prolog_corpus.cpp` (ctest **`prolog_corpus`**) runs
+every case through **`insimul::InsimulKB`** — the plugin's own RAII wrapper over
+the `libinsimul` C ABI, the same class `UInsimulPrologSubsystem` wraps in
+UStructs. It is not a second reader written for the gate: it is this repo's
+shipping Prolog path, pointed at core's vectors. Solution sets are compared as an
+unordered **multiset** with integral-number normalization — `conformance/README.md`'s
+order-insensitivity rule, the same canonicalization core's TS runner and Unity's
+`check-prolog.mjs` use.
+
+```
+255 case(s) executed, 1 amendment rewrite(s) applied, 0 failure(s)
+```
+
+Three things keep that number honest:
+
+1. **A floor and a required-file list.** 255 cases could be reached with the
+   band-120 packs missing entirely, so the eight `mechanic-*` packs plus
+   `agent-ai`, `geo-map` and `scaffold` are named individually and must each
+   contribute cases.
+2. **The amendment is checked both ways.** The corpus is authored against
+   tau-prolog and left **unamended on disk**; exactly one case
+   (`assert-retract::asserta-prepends`, which uses `log/1` where Trealla registers
+   `log` as a static builtin) is rewritten in memory with a printed `[AMEND]`
+   line. A rewrite rule that silently decides a verdict is exactly the kind of
+   thing that rots, so the test fails if a declared row matches *nothing* (stale
+   table) **and** if the amended case now passes *unamended* (obsolete rewrite).
+3. **Live, negative and syntax controls.** A trivial goal with a known answer, the
+   same goal against a deliberately wrong expectation, and a malformed program.
+   "255 of 255 matched" only means something if a mismatch, a wrong comparison and
+   a consult error could each have been seen in this process.
+
+**A libinsimul defect Unity had to work around is fixed, and this leg is now its
+regression test.** Unity's `check-prolog.mjs` spawns a fresh **process per case**
+(~40 ms each) because the `libinsimul` it measured (git `f1548a4`) aborted with
+SIGTRAP on the *second* `insimul_kb_destroy` in a process, and leaking KBs instead
+broke library-module loading after ~64. Re-measured here against the shipping
+library (git `e019244`, trealla v2.106.1): **200 create / consult / query / destroy
+cycles in one process, clean.** Both defects are gone, so this leg runs all 255
+cases in-process — and because it does, it *is* the standing regression test: if
+either comes back, the binary crashes or its consults start failing, and ctest
+says so. That is a finding for core's side, recorded here rather than worked
+around silently.
+
+### 13.3 The decision half — 0 of 212, measured and named
+
+Not one of the 212 decision-layer cases can be executed **in any language**, and
+the reason is the one §12.2 already recorded: reaching a decision layer means a
+row in `native/corebridge/js/entry.js`, and there are no mechanic rows. The
+shipped `libinsimulcore` answers `core.methods` with exactly five names —
+`core.methods`, `quest.hydrate`, `quest.radiantTick`, `radiant.baseTemplates`,
+`radiant.generate` — which ctest `mechanic_bridge` measures against the real
+library and pins.
+
+`tools/verify-mechanics/check-mechanic-corpora.mjs` is the gate that keeps that
+statement true rather than letting it age into a paragraph. It does **not**
+pretend to execute; it measures, and every part of the measurement can fail:
+
+| it checks | so that |
+| --- | --- |
+| every area, file and case count against `MECHANIC_CORPORA.json` | a corpus that **appears**, grows or shrinks is a failure that names itself |
+| every `executedBy` names a file that exists **and** a ctest target CMake registers | a runner named in a manifest and absent from the build is the same rot one level up |
+| every area without a runner carries a stated `blocker` | a silent `null` reads as "nothing to do here" |
+| the pinned method list against `EXPECTED_METHODS[]` in `test_mechanic_hosts.cpp` | one measurement site, one mirror, and drift between them fails |
+| the vendored `modules/genre-activation.json` against `MODULE_HOSTS.json` | core moving a host interface out from under the plugin is caught — this is the one band-120 corpus check that runs **today** |
+| **eleven negative controls** | "0 of 212 executable" is a measurement, not a decoration |
+
+It needs no binaries on purpose. The single fact that would — asking
+`core.methods` — is already measured once by ctest `mechanic_bridge` under
+`--require-binaries`; driving the C ABI a second time from Node would give this
+repo two places to measure one fact and two places for them to disagree.
+
+**A mechanic row ARRIVING fails this gate as loudly as one disappearing.** That is
+deliberate: an arrived row means 212 cases suddenly have a runner and this file
+has to be pointed at them, which is a change nobody should be able to land
+quietly.
+
+### 13.4 Divergence, classified
+
+Nothing was amended away. Three divergences exist and all three are recorded
+above rather than smoothed over:
+
+1. **212 decision cases vendored with no runner.** *Core-side, blocked.* Not a
+   defect in this repo and not fixable here — it needs the entry.js rows §12.3
+   proposes. Vendoring them anyway is the right call: the counts are pinned, so
+   the day a row lands the gate says how much is now reachable.
+2. **Five corpus prefixes not mirrored.** *Scope, declared.* Printed with a count
+   and a reason on every re-vendor.
+3. **Unity spawns a process per Prolog case; this repo does not.** *Engine-side,
+   resolved.* The defect that forced it is fixed in the shipping library
+   (§13.2); the difference is a measurement, not a divergence in what the two
+   engines prove.
+
+One more, from §12.5's list and still true: this repo's portable half is
+**executed** by a gate where Unity's equivalent is read by a human. The
+`prolog_corpus` leg extends that — the corpus half is executed here too.
+
+### 13.5 What is gated, and what still is not
+
+| claim | gate | binaries? |
+| --- | --- | --- |
+| the corpus is a byte-for-byte mirror of core | `vendor-conformance.mjs --check --core` | no |
+| no area silently shrank | `VENDORED.json` `cases` + `caseFloor` | no |
+| the band-120 decision corpora are what the manifest says | `check:mechanic-corpora` | no |
+| every unexecuted area names its blocker | `check:mechanic-corpora` | no |
+| the activation table matches the implemented host surface | `check:mechanic-corpora` | no |
+| **all 255 Prolog cases match core's golden solution sets** | **ctest `prolog_corpus`** | **yes** |
+| the bridge still answers with no mechanic row | ctest `mechanic_bridge` | yes |
+
+Still not gated, and stated rather than implied: `UInsimulPrologSubsystem`'s
+UStruct marshalling. `prolog_corpus` proves `libinsimul` + `InsimulKB` + the
+corpus; the Blueprint-facing layer above `InsimulKB` needs a real engine, and
+`VERIFICATION.md` is its pass. And the decision half is not gated *as behaviour*
+by anything, here or anywhere — only its size, its blocker and its unreachability
+are.
+
+## 14. US-3 of 146 — modules activated from the genre bundle
+
+US-1 implemented the host half and measured that none of it can be reached. US-2
+vendored the corpora and executed the half that has a runner. This story is the
+third part of an adoption and the only one a player would notice: **which modules
+a world turns on, and what an unselected one costs.**
+
+Core's module contract §7.2 is titled *"It is data, so a plugin does not hardcode
+a list"*, and §7.3 states the cost of not being selected in one sentence: **no
+consulted rule pack and no registered system.** Both halves are implemented here,
+and — this is the part worth the section — both are *witnessed* rather than
+asserted.
+
+| criterion | where it lives | what proves it |
+| --- | --- | --- |
+| the active set is read from the IR | `Portable/InsimulModuleActivation.{h,cpp}`, `templates/source/mechanics/InsimulModuleActivator.*` | `check:activation` (no module id or pack area appears in any activation source) + ctest `module_activation` |
+| an inactive module contributes nothing | `Portable/InsimulModulePacks.*`, `FInsimulMechanicHosts::RestrictTo` | **ctest `activation_witness`** — 8 genres × 11 packs, in a real KB |
+| a playable scene exercises two mechanics | `templates/source/mechanics/InsimulMechanicSampleScene.*` | its script is a file, and `activation_witness` executes the same file |
+
+### 14.1 Finding — the activation table names packs the C ABI cannot hand over
+
+The table tells a plugin *which* rule packs a genre consults. Nothing tells it
+where the **text** of those packs comes from. It is a TypeScript constant inside
+core's bundle (`PREDICATE_PACKS` in `src/prolog/predicate-packs.ts`), and the C
+ABI carries no row that returns one — `core.methods` still answers with the same
+five names ctest `mechanic_bridge` pins. So a native adapter can resolve a
+perfectly correct active module set and then consult **nothing**, which is the
+half of §7.3 that costs nothing to implement and proves nothing.
+
+The workaround is the same act as vendoring `conformance/`: the eleven packs are
+mirrored byte-for-byte into `templates/project/Content/Data/insimul/packs/`
+behind a manifest that pins core's commit, a sha256 and — importantly — core's
+**consult order**, which is a hard constraint rather than a preference (the
+routine and map packs write clauses for predicates the substrate declares
+`:- dynamic`, and a `:- dynamic` after a clause is a `permission_error` on a
+strict ISO engine). `tools/vendor-packs/vendor-packs.mjs` does the vendoring and
+the drift check; it **executes** core rather than parsing it, because the pack
+texts are assembled by five registries and a regex over the sources would have to
+re-implement that assembly.
+
+> **Amendment asked of core:** a `prolog.packs` bridge row returning
+> `{area, prolog, runtimePredicates}[]` in consult order. It deletes
+> `Content/Data/insimul/packs/`, `tools/vendor-packs/`, and one implementation of
+> `IInsimulPredicatePackSource` in each of the three engine repos.
+
+### 14.2 Finding — a save cannot answer "which modules is this world running"
+
+`activeModulesForWorld()` reads `ir.meta.genreConfig.id`. A `SaveFile`'s
+`worldSnapshot` carries no `meta` at all — its nine sections are
+`world / countries / settlements / characters / lots / quests / rules / actions /
+grammars` — so the *second* boot path of any engine, resuming a save, has nowhere
+to read the genre from. Measured, and pinned as a check in ctest
+`module_activation` so that core persisting the resolved set makes this repo fail
+and closes the finding.
+
+This plugin does not paper over it. `EInsimulGenreSource` reports **where the
+genre came from** — `WorldIr`, `Declared` (the game said so) or `Undeclared` —
+and the boot line prints it, because "which modules are on" is only as
+trustworthy as the answer to "who said so". A game with no genre at all gets
+*every* pack, which is core's own editor/tool default and is logged as a
+**warning** rather than taken as normal.
+
+> **Amendment asked of core:** persist the resolved active module set (or at
+> least the genre id) in the save envelope. Today a resumed game either re-reads
+> its World IR export or is told its own genre by hand.
+
+### 14.3 Finding — an inactive module's vocabulary RAISES rather than failing
+
+Core's traversal pack documents authored requirements that name *another*
+module's vocabulary: `traversal_requires(camp, ford, has_item(Actor, rope, 1))`.
+Under a genre that activates traversal and **not** the module owning the goal,
+that predicate is not in the KB at all, and the query does not fail — it raises.
+
+Measured here, independently of the Unity probe that first reported it, in ctest
+`activation_witness`:
+
+```
+§14.3 under genre 'adventure': RAISED — error(existence_error(procedure,has_skill/3),has_skill/3)
+```
+
+That matters to a *scene*, not to a corpus: a runner that folds "raised" into
+"did not hold" would show a player a refusal core never decided. So
+`insimul::RunScenario` keeps `Raised` apart from `Mismatched` as a distinct
+outcome, `AInsimulMechanicSampleScene::Act()` does nothing at all on it, and the
+gate **pins the measurement** — the day core makes a cross-module goal fail
+cleanly, `activation_witness` fails and the finding gets closed rather than
+forgotten.
+
+> **Amendment asked of core:** either declare the cross-module predicates a
+> requirement may name `:- dynamic` in the shared vocabulary pack, or state in
+> the contract that an authored goal naming an inactive module raises — so an
+> engine knows which of the two answers to write UI for.
+
+### 14.4 The scene, and exactly what it proves
+
+`AInsimulMechanicSampleScene` builds a guard, a dark courtyard and a wall. The
+engine measures (a line trace from the guard's eye, a separation, the movement
+mode at the wall), **core decides** (`detects/2`, `can_traverse/3`, out of its own
+packs, inside libinsimul), and the engine executes the answer. Two adopted
+mechanics end to end.
+
+The script is `Content/Data/insimul/scenarios/dark-courtyard.json` — five steps,
+each naming the module it exercises, the goal, the expected answer and what the
+scene *does* about it. The scene reads that file; ctest `activation_witness`
+reads the same file with the same reader (`insimul::FInsimulMechanicScenario`) and
+runs it through the same runner and the same library. That is what makes "a
+playable scene exercises at least two adopted mechanics" a gate rather than a
+screenshot:
+
+```
+scenario 'dark-courtyard' (genre 'rpg'): 5 step(s), mechanics exercised [perception, traversal]
+```
+
+**What it is not.** This is the **predicate** half of each module. The decision
+layers — `DetectionTracker`, `TraversalPlanner` — are still behind bridge rows
+that do not exist (§12.1), so no `observe()` call and no `traverse()` call happens
+in this scene or anywhere else. The fifth step is deliberately about a module the
+`rpg` bundle does **not** select, and it asserts the §7.3 cost from inside the
+running scene: `current_predicate(can_afford_stamina/2)` has no solutions.
+
+What no gate in this repo can do is move an actor. `VERIFICATION.md` US-M2 is that
+pass, and it is the only claim about this file a human has to make.
+
+### 14.5 Three deltas from the Unity probe, all measured rather than inherited
+
+Unity (tasklist 145 US-3) is the probe and this is the port. Three things are
+deliberately different, and each is a *measurement* this repo took:
+
+1. **The KB witness is a ctest, not a compiled-at-gate-time C driver.** Unity's
+   `check-activation.mjs` writes a C file, links it against libinsimul and drives
+   it line by line, because it has no C++ harness to put the claim in. This repo
+   does: `activation_witness` links the same library through
+   `insimul::InsimulKB` — the plugin's own wrapper, the same one
+   `UInsimulPrologSubsystem` wraps — and calls the plugin's own
+   `ConsultActivePacks`. A JavaScript re-implementation of the thing under test
+   would be a second implementation, which §4 rules out for adapters and which is
+   no more acceptable in a gate.
+2. **One KB per genre, in one process.** Unity spawns a process per script
+   because of two libinsimul defects (§13.2/§13.4) that are fixed at the shipping
+   `e019244`. Re-measured: eight create/consult/query/destroy cycles in one
+   process, clean.
+3. **`vite-node` is not the only way to execute core.** `vendor-packs.mjs`
+   resolves a runner rather than requiring one — `vite-node` when a checkout has
+   it, otherwise an `esbuild` bundle of the emitter run by node. Both execute
+   core's TypeScript, which is the property that matters; requiring the first
+   would have made re-vendoring impossible in a workspace whose core checkout
+   carries no `node_modules`. The runner used is printed, never assumed.
+
+One thing is deliberately the **same**: the split of "read the genre → resolve →
+consult in order", the three answers (known / unknown / undeclared), the pack
+manifest's shape and the `dark-courtyard` scenario. One mechanism across the
+engine repos, not three lookalikes.
+
+### 14.6 What is gated, and what still is not
+
+| claim | gate | binaries? |
+| --- | --- | --- |
+| the packs are core's, byte for byte | `check:packs --core` | no |
+| the table a BUILD reads is the vendored mirror | `check:activation` | no |
+| every genre resolves to the packs + hosts its module rows name | `check:activation` | no |
+| no module id or pack area is named in an activation source | `check:activation` | no |
+| the scenario names a known genre and ≥2 active mechanics | `check:activation` | no |
+| the resolver's three answers, the consult's four outcomes, the host restriction, the runner's five outcomes | **ctest `module_activation`** (444 checks) | no |
+| a save carries no genre (§14.2) | ctest `module_activation` | no |
+| **an inactive module's vocabulary is ABSENT from a real KB** | **ctest `activation_witness`** (8 genres × 11 packs) | **yes** |
+| **the scene's five steps get core's real answers** | **ctest `activation_witness`** | **yes** |
+| a cross-module goal still raises (§14.3) | ctest `activation_witness` | yes |
+
+Still not gated, and stated rather than implied: **every line of UE-coupled code
+in this story.** `UInsimulModuleActivator`, `UInsimulMechanicHostBinder`'s
+restriction call and `AInsimulMechanicSampleScene` need a real engine and a real
+level. What the gates prove is that the DATA those classes read is correct and
+complete, that the portable logic behind them is right in every branch, and that
+the decisions the scene asks for are the decisions core actually makes.
+`VERIFICATION.md` US-M2 is the human pass for the rest.
+
 ## Appendix A — `docs/UNIFICATION_ROADMAP.md` Decision 1
 
 That file lives in the **project checkout**, outside this submodule, so this
@@ -1117,4 +1677,76 @@ node -e "const a=require('./conformance/VENDORED.json').files,
 # §10.4 what was retained, and how big it is
 wc -l Source/InsimulRuntime/Portable/InsimulQuestSystem.cpp      # 650
 grep -rn 'quest\.hydrate\|quest\.radiantTick' Source/            # no hits — comparison-only
+
+# ── US-1 of 146 (§12) ───────────────────────────────────────────────────────
+
+# §12.1 what the shipped binary answers. This is the whole finding, and it is
+# also ctest `mechanic_bridge`, which pins the answer both ways round.
+cmake -S tools/verify-unreal -B tools/verify-unreal/build -DINSIMUL_REQUIRE_BINARIES=ON
+cmake --build tools/verify-unreal/build
+./tools/verify-unreal/build/insimul_verify_mechanic_bridge --bridge
+#   libinsimulcore: 0.1.0 (quickjs 2025-04-26, core 247adfa2…)
+#   7 x "carries no <module> rows … The host half is implemented and inert"
+#   OK: 120 check(s)
+
+# §12.1 the same question with no C++ at all, for a report
+grep -c "'" native/corebridge/js/entry.js                        # the row table, in one screen
+
+# §12.4 the host half, and that nothing is stubbed
+ls templates/source/mechanics/                                   # 14 files, 7 hosts
+node -e "console.log(require('./tools/verify-mechanics/MODULE_HOSTS.json').stubbed)"   # {}
+
+# §12.6 the mirror guard, its negative controls, and the core diff
+node tools/verify-mechanics/check-mechanics.mjs                  # 7 modules, 8 ifaces, 33 members
+node tools/verify-mechanics/check-mechanics.mjs --core "$CORE"   # byte-identical sources
+node tools/verify-mechanics/check-mechanics.mjs --core "$CORE" --write   # re-vendor
+
+# §12.6 --require-binaries can actually fail. Copy the harness somewhere with no
+# insimul-native above it (a symlink will NOT do — `..` resolves physically).
+cp -R Source conformance tools /tmp/fakerepo/ && rm -rf /tmp/fakerepo/tools/verify-unreal/build
+cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/warn                            # warns, exit 0
+cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/fail -DINSIMUL_REQUIRE_BINARIES=ON  # exit 1
+ctest --test-dir /tmp/warn -N | tail -1                          # 12 legs, not 17
+
+# §13.1 what was vendored, what was not, and the floor
+node tools/vendor-conformance.mjs --core "$CORE"                 # 64 files, 5 exclusions printed
+node tools/vendor-conformance.mjs --check                        # 529 cases, 10 areas, at/above floor
+node tools/vendor-conformance.mjs --check --core "$CORE"         # byte-identical to core
+
+# §13.2 the predicate half, executed
+ctest --test-dir tools/verify-unreal/build -R prolog_corpus --output-on-failure
+./tools/verify-unreal/build/insimul_verify_prolog_corpus | tail -3   # 255/255, 1 [AMEND]
+
+# §13.2 the libinsimul KB-lifetime defects Unity had to work around — re-measured.
+# 200 create/consult/query/destroy cycles in ONE process; §6.7 and Unity's
+# check-prolog.mjs record the versions where this aborted on the second destroy.
+./tools/verify-unreal/build/insimul_verify_prolog_corpus | head -2   # library version + 255 KBs
+
+# §13.3 the decision half: what is vendored, and what can run it
+node tools/verify-mechanics/check-mechanic-corpora.mjs           # 0 of 212, 11/11 controls
+node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE"      # + drift vs core
+node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE" --write
+
+# ── US-3 of 146 (§14) ───────────────────────────────────────────────────────
+
+# §14.1 the rule packs, vendored out of core by EXECUTING it. The runner is
+# resolved (vite-node, else esbuild + node) and printed, never assumed.
+node tools/vendor-packs/vendor-packs.mjs --core "$CORE" --write  # 11 packs, consult order
+node tools/vendor-packs/vendor-packs.mjs --check                 # hashes, no core needed
+node tools/vendor-packs/vendor-packs.mjs --check --core "$CORE"  # byte-for-byte vs core
+
+# §14.6 the table, the resolution, and the no-hardcoded-list criterion
+node tools/verify-mechanics/check-activation.mjs                 # 8 genres, 8 sources, 6 controls
+
+# §14.2 + the resolver/consult/restriction/runner, every branch, no library
+ctest --test-dir tools/verify-unreal/build -R module_activation --output-on-failure
+./tools/verify-unreal/build/insimul_verify_module_activation | tail -1     # OK: 444 check(s)
+
+# §14.3 + §14.4 the KB witness and the scene, EXECUTED. Needs libinsimul.
+ctest --test-dir tools/verify-unreal/build -R activation_witness --output-on-failure
+./tools/verify-unreal/build/insimul_verify_activation_witness | grep '§14.3'
+./tools/verify-unreal/build/insimul_verify_activation_witness | grep 'mechanics exercised'
+
+# the whole suite, after this story: 17 legs with an insimul-native checkout visible
+cd tools && npm run check && npm run check:host:binaries
 ```

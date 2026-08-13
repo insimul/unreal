@@ -1,0 +1,167 @@
+{
+  "description": "Provenance + drift guard for the band-120 host interfaces this plugin implements. `modules` and `interfaces` are derived from core; `stubbed` is this repo’s own side. Regenerate with `node verify-mechanics/check-mechanics.mjs --core <packages/core> --write`.",
+  "source": "@insimul/core (src/modules/module-contract.ts, src/game-engine/{host,system}-contracts.ts)",
+  "coreCommit": "76782e5e4fe35a981ab55845753632b8a7f3e0cc",
+  "band": "120, 121, 122, 123, 124, 125",
+  "files": {
+    "src/modules/module-contract.ts": "e33e8be6306538ba866228ceda2108f622979646700c6ab46c5579dac739ceef",
+    "src/game-engine/host-contracts.ts": "211d1dd63664c1984fe70107162b5206fa6c2b848861232f55d82a51569d578d",
+    "src/game-engine/system-contracts.ts": "9e86849e922e860072f55a2ef04cef36ad0c390722eb3793f0ec65b180f679f4"
+  },
+  "modules": [
+    {
+      "id": "combat",
+      "tasklist": "120",
+      "decisionLayer": [
+        "CombatResolver"
+      ],
+      "hostInterface": [
+        "ICombatSystem",
+        "ITrajectoryProbe"
+      ]
+    },
+    {
+      "id": "perception",
+      "tasklist": "121",
+      "decisionLayer": [
+        "DetectionTracker"
+      ],
+      "hostInterface": [
+        "IPerceptionProbe"
+      ]
+    },
+    {
+      "id": "skill",
+      "tasklist": "123",
+      "decisionLayer": [
+        "SkillProgression"
+      ],
+      "hostInterface": [
+        "ISkillModifierSink"
+      ]
+    },
+    {
+      "id": "traversal",
+      "tasklist": "122",
+      "decisionLayer": [
+        "TraversalPlanner",
+        "VehicleRegistry",
+        "FastTravelDirector"
+      ],
+      "hostInterface": [
+        "ITraversalProbe",
+        "ILocomotionHost"
+      ]
+    },
+    {
+      "id": "equipment",
+      "tasklist": "124",
+      "decisionLayer": [
+        "EquipmentManager",
+        "ItemLedger",
+        "Market",
+        "ItemPlacer"
+      ],
+      "hostInterface": [
+        "ICombatStatSink"
+      ]
+    },
+    {
+      "id": "stamina",
+      "tasklist": "120",
+      "decisionLayer": [
+        "StaminaPool"
+      ],
+      "hostInterface": [
+        "ISurvivalSystem"
+      ]
+    },
+    {
+      "id": "routine",
+      "tasklist": "125",
+      "decisionLayer": [
+        "RoutineDirector",
+        "LocomotionDirector"
+      ],
+      "hostInterface": [
+        "ILocomotionHost"
+      ]
+    }
+  ],
+  "interfaces": {
+    "ICombatSystem": {
+      "source": "src/game-engine/system-contracts.ts",
+      "members": [
+        "registerEntity",
+        "unregisterEntity",
+        "executeAttack",
+        "applyDamage",
+        "isCombatEnabled",
+        "getHealth",
+        "heal",
+        "dispose"
+      ]
+    },
+    "ITrajectoryProbe": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "query"
+      ]
+    },
+    "IPerceptionProbe": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "sense"
+      ]
+    },
+    "ISkillModifierSink": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "applyModifiers"
+      ]
+    },
+    "ITraversalProbe": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "query"
+      ]
+    },
+    "ILocomotionHost": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "travel"
+      ]
+    },
+    "ICombatStatSink": {
+      "source": "src/game-engine/host-contracts.ts",
+      "members": [
+        "getBaseStats",
+        "applyStats"
+      ]
+    },
+    "ISurvivalSystem": {
+      "source": "src/game-engine/system-contracts.ts",
+      "members": [
+        "update",
+        "restoreNeed",
+        "consumeStamina",
+        "recoverStamina",
+        "setTemperature",
+        "addModifier",
+        "removeModifier",
+        "getNeed",
+        "getAllNeeds",
+        "getNeedPercent",
+        "isAnyCritical",
+        "isAnyWarning",
+        "setEnabled",
+        "isEnabled",
+        "setOnNeedChanged",
+        "setOnSurvivalEvent",
+        "setOnDamageFromNeed",
+        "dispose"
+      ]
+    }
+  },
+  "stubbed": {}
+}

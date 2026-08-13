@@ -3,9 +3,17 @@
 The native-Prolog stack has two verification tiers:
 
 1. **Automated, in this harness** — the plain-C++ `insimul::InsimulKB` core is
-   unit- and conformance-tested on the host clang toolchain against a real
-   `libinsimul` (`npm run engines:unreal:host`), and every UE `.h/.cpp` passes the
-   structural syntax gate (`npm run engines:check`). See `tools/README.md`.
+   conformance-tested on the host clang toolchain against a real `libinsimul`:
+   ctest **`prolog_corpus`** drives all **255** vendored `conformance/prolog` cases
+   (including the 125 band-120 `mechanic-*` cases) through `InsimulKB` and diffs
+   core's golden solution sets. It is one of the four legs that need the native
+   library, so run `npm run check:host:binaries` from `tools/` — plain
+   `check:host` drops them with a configure-time warning. Every UE `.h/.cpp` also
+   passes the structural syntax gate (`npm run engines:check`).
+
+   Until tasklist 146 US-2 this paragraph promised something no gate did:
+   `conformance/prolog/` was hash-checked and executed by nothing (see
+   `RUNTIME_CORE_ADOPTION.md` §6.5 and §13.2). It is true now.
 2. **Human, in a real UE editor** — the UE-coupled layer (subsystems, actors,
    widgets) cannot be built in this harness (no Unreal SDK / UBT), so it is
    syntax-gated only and verified by a person following the checklists below.
@@ -734,3 +742,164 @@ Godot `chat_model.gd` / `pause_menu_model.gd` / `save_slot_model.gd` and the sha
 corpora case-for-case; only the UMG widget layer differs by design. Any streaming /
 gating / slot-rendering divergence found in the human pass is a bug — file it against
 US-XU4.
+
+---
+
+## US-M1 — band-120 mechanic hosts (Unreal editor required)
+
+Tasklist 146 US-1. The eight host interfaces core's band-120 mechanic modules
+declare now have Unreal implementations in `templates/source/mechanics/`. **Nothing
+here can be executed by a gate in this repo** — no UBT, no engine headers — so the
+whole of the engine half is a human pass. `RUNTIME_CORE_ADOPTION.md` §12 is the
+write-up; read §12.1 first, because the expected outcome of the boot log below is
+"every mechanic is inert", and that is a pass, not a failure.
+
+### 0e. Automated pre-checks (run before the human pass)
+
+```sh
+cd tools
+npm run check                 # includes the mechanic host manifest + 4 negative controls
+npm run check:host:binaries   # --require-binaries: adds mechanic_bridge (the measurement)
+```
+
+- [ ] `check:mechanics` prints 7 modules, 8 host interfaces, 33 members, and names an
+      implementing file for **every** interface (no `STUBBED:` line).
+- [ ] `ctest mechanic_hosts` passes (106 checks) and `mechanic_bridge` passes (120),
+      the latter printing the libinsimulcore version stamp it measured.
+
+### 1. Boot log — the honest report
+
+- [ ] Open an exported game with `UInsimulMechanicHostBinder` present and play. The
+      log carries one `[Insimul]` line per band-120 module. In any build shipping today
+      each is a **Warning** reading `<module>: this build's core bridge carries no
+      <module> rows … The host half is implemented and inert.` That is the correct
+      output — see §12.1. A `Log`-level "reachable and wired" line means a mechanic row
+      has landed in `native/corebridge/js/entry.js`, and §12 needs revisiting.
+- [ ] No module line is missing, and none reads "unavailable" with no remedy.
+
+### 2. The registry and the probes
+
+- [ ] `RegisterActor("nessa", <NPC>)` then `RegisterLocation("forge_gate", …)`. Call a
+      trajectory query through `Hosts()`: with clear line of sight the reading is
+      `clear`, with a wall between the two it is not, and `blockedBy` names the actor
+      the trace hit.
+- [ ] Stand the NPC in shadow and in sunlight: the perception reading's `light` moves
+      between the ambient floor and 100. It is an approximation (§12.4) — check it
+      *moves*, not that it matches a lightmap.
+- [ ] Unregister the NPC's atom, then query again: the probe reports **no reading**,
+      and the caller sees core's documented fallback rather than a blocked line.
+
+### 3. Locomotion
+
+- [ ] Order a movement to a registered location atom for a pawn with an
+      `AAIController`: the pawn walks there and the report is `arrived: true` at the
+      moment of the call, not at the moment of arrival (§12.2 finding 3).
+- [ ] Order one for a pawn with no controller, and one to an unregistered atom: both
+      report `arrived: false` with a reason naming what was missing. Neither crashes.
+- [ ] Order the same movement at `urgency: "urgent"` and `"idle"`: `MaxWalkSpeed`
+      differs. The atom never leaves core as a speed.
+
+### 4. Combat and survival
+
+- [ ] `RegisterCombatEntity` a target, then apply a damage number through the host:
+      health drops by **exactly** that number. No crit, no block, no dodge is applied
+      here — if the number changes, an adapter is rolling its own damage (§12.4).
+- [ ] Call `ExecuteAttack`: it refuses and warns once. This is deliberate.
+- [ ] In a survival world, spend stamina through the host: the HUD meter moves once,
+      not twice, and the needs clock is not double-ticked. `SetEnabled(false)` stops
+      decay and keeps values; re-enabling resumes rather than restarts.
+
+### 5. Skill modifiers
+
+- [ ] Apply `{ move_speed: 20 }` for a registered character: `MaxWalkSpeed` rises.
+      Apply the **same** set again: it does not rise a second time (core requires
+      idempotence).
+- [ ] Apply `{ carry_capacity: 10 }`: nothing changes and the log warns once that the
+      parameter reached nothing. That is the documented gap, not a bug (§12.4).
+
+### Deltas vs Unity/Godot
+
+**Expected: the four in §12.5**, and no others. `false` in place of a caught
+exception, `AddModifier` landing without a preset, plain C++ implementations behind
+one reflected binder, and the portable half being executed by a gate here. Anything
+else — a different fallback, a re-priced action, a re-rolled damage number — is a
+bug against US-M1.
+
+---
+
+## US-M2 — modules activated from the genre bundle (Unreal editor required)
+
+Tasklist 146 US-3. This world's active mechanic modules are now read out of the
+genre bundle core emitted, the packs they own are consulted into the KB, the hosts
+no active module names are unregistered, and a sample scene lets two adopted
+mechanics decide something. `RUNTIME_CORE_ADOPTION.md` §14 is the write-up; read
+§14.4 first, because the scene exercises the **predicate** half of each module and
+the decision layers are still unreachable — that is a pass, not a failure.
+
+### 0. Automated pre-checks (run before the human pass)
+
+```sh
+cd tools
+npm run check                 # adds check:packs + check:activation (6 controls)
+npm run check:host:binaries   # adds module_activation + activation_witness
+```
+
+- [ ] `check:activation` prints 8 genres, 8 activation sources with no mechanic
+      named in any of them, and 1 scenario.
+- [ ] `ctest module_activation` passes (444 checks) — the resolver's three answers,
+      the consult's four outcomes, the host restriction and the runner's five
+      outcomes, over the data an exported game reads.
+- [ ] `ctest activation_witness` passes (112 checks) and prints
+      `witnessed 8 genre(s) x 11 pack(s)`, the scenario's five steps, and the
+      §14.3 line — an authored requirement naming an inactive module's vocabulary
+      still **RAISES**. If that line no longer says RAISED, core changed and §14.3
+      is stale.
+
+### 1. Boot log — which modules this world turns on, and who said so
+
+- [ ] Play an exported game. `LogInsimulActivation` carries one line naming the
+      genre, **where it came from** (`from the World IR` for an exported world),
+      the active modules, the consulted packs and the active host interfaces.
+- [ ] The next line names the packs that were **not** consulted. It is not empty
+      for any real genre, and every name in it belongs to a module this world's
+      bundle did not select.
+- [ ] `LogInsimulMechanicSurface` then warns once per host it **unregistered**:
+      "implemented and UNREGISTERED — no module this world activates names it".
+      Cross-check one against the activation line: it must not appear there.
+
+### 2. The three answers, deliberately provoked
+
+- [ ] Set `UInsimulModuleActivator::DeclaredGenre` to a genre core does not know
+      and re-run `ActivateForGenre`: a **warning** naming the genre, the shared
+      vocabulary consulted, and **no** mechanic module active. Not a crash, and not
+      a silent fallback to every module.
+- [ ] Rename `Content/Data/WorldIR.json` and play: a **warning** that no genre was
+      declared, and every pack consulted. That is core's editor default and is
+      wrong for a shipped game — which is exactly what the warning says.
+- [ ] Rename `Content/Data/insimul/packs/` and play: an **error** per active pack
+      and a final error that the modules owning them cannot answer. Nothing
+      pretends to have booted.
+
+### 3. The scene (the two-mechanics claim)
+
+- [ ] Drop `AInsimulMechanicSampleScene` into a level, point `GuardActor` and
+      `PlayerActor` at two pawns with something solid between them, and play. The
+      log prints five steps; the two `perception` and two `traversal` steps read
+      `→ <what the scene did>`, and the fifth reports that an inactive module's
+      vocabulary is absent.
+- [ ] Move the player into clear line of sight of the guard and re-run
+      (`RunScene`): the first step's answer **changes**, because the probe's
+      reading changed. That is the whole claim — the engine measured, core decided.
+- [ ] Set `bUseLiveProbes = false` and re-run: the log says the readings were
+      **REPLAYED**, and the answers match ctest `activation_witness` exactly. A
+      replay must never be reported as a measurement.
+- [ ] Delete the scenario file and play: one error naming the path, and no steps.
+
+### Deltas vs Unity/Godot
+
+**Expected: the three in §14.5**, and no others — the KB witness is a ctest rather
+than a compiled-at-gate-time C driver, one KB per genre in one process, and a
+resolved rather than required TypeScript runner for re-vendoring. The activation
+semantics themselves (the three answers, the consult order, what an inactive module
+costs) are core's and must be identical across the three engines. Anything else is
+a bug against US-M2.

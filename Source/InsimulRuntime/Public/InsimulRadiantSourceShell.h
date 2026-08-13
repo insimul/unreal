@@ -34,7 +34,7 @@
 
 // Forward declarations of the plain-C++ cores. Kept out of this header so the C
 // ABI and the std-based portable types stay implementation details.
-namespace insimul { class FRadiantSource; class FInsimulCoreBridge; }
+namespace insimul { class FRadiantSource; class FInsimulCoreBridge; class ICoreCaller; }
 
 /** Which implementation answers GenerateQuests(). Mirrors insimul::ERadiantSource. */
 UENUM(BlueprintType)
@@ -155,6 +155,19 @@ public:
 	/** Reason the last call failed or produced nothing, or "" if it succeeded. */
 	UFUNCTION(BlueprintPure, Category = "Insimul|Radiant")
 	FString GetLastError() const;
+
+	/**
+	 * The transport this object holds, for ANOTHER adopted slice that must share the
+	 * one libinsimulcore runtime rather than starting a second QuickJS. Borrowed and
+	 * non-owning — it dies with this object. Null when this build has no bridge.
+	 *
+	 * Deliberately NOT a UFUNCTION: insimul::ICoreCaller is a portable C++ type and
+	 * does not cross into Blueprint. §4's seam is JSON in, JSON out and stays that
+	 * way; this accessor hands out the seam, not a shortcut past it. Added by US-1 of
+	 * tasklist 146 so the band-120 mechanic surface can ask `core.methods` of the
+	 * handle this game is actually holding.
+	 */
+	insimul::ICoreCaller* GetCoreCaller() const;
 
 private:
 	/** RAII handle over libinsimulcore. Released in BeginDestroy. */

@@ -68,12 +68,58 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
     bool IsAnyWarning() const;
 
+    // ── The queries core's ISurvivalSystem asks that this system could not answer ──
+    // Added by US-1 of tasklist 146 (RUNTIME_CORE_ADOPTION.md §12.4). `getNeed`,
+    // `getAllNeeds`, `setEnabled` and `isEnabled` are members of the interface core's
+    // `stamina` module declares, and every one of them needed a reader this class did
+    // not expose. They are ordinary accessors over state it already held — nothing
+    // here decides anything, and FInsimulSurvivalHost is their only caller today.
+
+    /** Whether this world authored that need at all. A world with no hunger must read
+     *  as ABSENT rather than as hunger at zero. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    bool HasNeed(const FString& NeedId) const;
+
+    /** Every authored need id, sorted. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    void GetNeedIds(TArray<FString>& OutIds) const;
+
+    /** The need's authored ceiling (0 when it has none). */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    float GetNeedMax(const FString& NeedId) const;
+
+    /** The need's authored decay rate per second (0 when it has none). */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    float GetNeedDecayRate(const FString& NeedId) const;
+
+    /** Whether ONE need is at its critical threshold — the per-need form of
+     *  IsAnyCritical, using the same both-extremes rule Update() applies. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    bool IsNeedCritical(const FString& NeedId) const;
+
+    /** Whether ONE need is at its warning threshold and not critical. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    bool IsNeedWarning(const FString& NeedId) const;
+
+    /** Stop or resume the needs clock. A disabled system decays nothing and fires
+     *  nothing; values and modifiers are kept, so re-enabling resumes rather than
+     *  restarts. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    void SetEnabled(bool bInEnabled);
+
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Survival")
+    bool IsEnabled() const;
+
     /** Broadcast when a survival event occurs */
     UPROPERTY(BlueprintAssignable, Category = "Insimul|Survival")
     FOnSurvivalEvent OnSurvivalEvent;
 
     UPROPERTY(BlueprintReadOnly, Category = "Insimul|Survival")
     int32 NeedCount = 0;
+
+    /** Whether the needs clock runs. False makes Update() a no-op. */
+    UPROPERTY(BlueprintReadOnly, Category = "Insimul|Survival")
+    bool bEnabled = true;
 
     UPROPERTY(BlueprintReadOnly, Category = "Insimul|Survival")
     FInsimulSurvivalDamageConfig DamageConfig;

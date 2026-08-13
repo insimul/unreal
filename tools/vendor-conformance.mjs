@@ -23,11 +23,19 @@
 //
 //   node tools/vendor-conformance.mjs --check
 //       Verify the checked-in corpus against VENDORED.json — every mirrored file
-//       present, hashing what the manifest records, and nothing extra hiding
-//       inside a mirrored directory. Needs no core checkout, so it runs in this
-//       repo's gates (ctest `corpus_manifest`, `npm run check:corpus`). Pass
-//       --core as well for the REAL drift check: a byte-for-byte diff against
-//       the source tree.
+//       present, hashing what the manifest records, nothing extra hiding inside
+//       a mirrored directory, and every area at or above its recorded case
+//       FLOOR. Needs no core checkout, so it runs in this repo's gates (ctest
+//       `corpus_manifest`, `npm run check:corpus`). Pass --core as well for the
+//       REAL drift check: a byte-for-byte diff against the source tree.
+//
+// COUNTS, THEN A FLOOR (146 US-2). Hashes alone cannot see a corpus SHRINK: a
+// file whose `cases` array is trimmed and re-hashed passes every check above.
+// `cases` records the exact per-area count of the checked-in tree and is
+// re-derived on --check; `caseFloor` is the largest count ever vendored and does
+// NOT drop on its own — a re-vendor that would lower one fails and names the
+// area, and --allow-corpus-shrink is the explicit, visible act of accepting it.
+// Ported from Unity's copy (tasklist 145 US-2), same mechanism, same flag names.
 //
 // LOCAL, NOT MIRRORED. A few paths under conformance/ are this repo's own and
 // have no counterpart in core; they are listed in `local` in the manifest and
@@ -82,6 +90,37 @@ const NOT_MIRRORED = [
       'editor-core adoption is a later wave — see RUNTIME_CORE_ADOPTION.md. ' +
       'Vendor these when this repo implements the editor core, not before: a ' +
       'corpus with no runner here would be a checked-in file nothing executes.',
+  },
+  {
+    prefix: 'generation/',
+    why:
+      'the generation-pack corpora (tasklist 134). That track\u2019s surface is the ' +
+      'Generation Console and its local tier; the shipped libinsimulcore answers ' +
+      'core.methods with no generation.* row (ctest mechanic_bridge pins the list), ' +
+      'so these vectors have no runner here. Vendor them with the row, not before.',
+  },
+  {
+    prefix: 'ai/',
+    why:
+      'the agentAi decision-layer corpus. agentAi is OUT of band 120\u2013125 ' +
+      '(this tasklist adopts combat / stamina / perception / traversal / skill / ' +
+      'equipment / routine), so no host interface here implements it. Its PREDICATE ' +
+      'half IS vendored and executed: conformance/prolog/agent-ai.json.',
+  },
+  {
+    prefix: 'map/',
+    why:
+      'the map decision-layer corpus. map is OUT of band 120\u2013125; its part-4 host ' +
+      'interface (ILocomotionHost) is already implemented for traversal, but nothing ' +
+      'here drives map resolution. Its PREDICATE half IS vendored and executed: ' +
+      'conformance/prolog/geo-map.json.',
+  },
+  {
+    prefix: 'grounding/',
+    why:
+      'the KGP grounding packs (tasklist 152). They are pack DATA \u2014 no `cases` ' +
+      'array, no golden vectors \u2014 consumed by core\u2019s koine alignment, and this ' +
+      'repo has adopted no grounding surface to run them against.',
   },
 ];
 
@@ -147,16 +186,67 @@ function gitCommit(dir) {
   }
 }
 
-/** Prolog case count per file — reported so a shrinking corpus is visible. */
-function prologCaseCount() {
-  const dir = path.join(CORPUS, 'prolog');
-  if (!fs.existsSync(dir)) return 0;
-  let total = 0;
-  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.json'))) {
-    const doc = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-    total += Array.isArray(doc.cases) ? doc.cases.length : 0;
+/**
+ * Case counts per corpus area — recorded in the manifest and re-checked, so a
+ * SHRINKING corpus is a failure rather than a quiet subset. Hashes alone would
+ * not catch it: a file that is deleted and un-declared shows up, but a file
+ * whose `cases` array is trimmed and re-hashed does not.
+ *
+ * A top-level file (README.md, predicate-schema-hash.json) belongs to no area
+ * and is not counted; so is any mirrored JSON with no `cases` array (the
+ * genre-activation TABLE, the content-library fixtures).
+ */
+function caseCounts(mirrored) {
+  const counts = {};
+  for (const rel of mirrored) {
+    if (!rel.includes('/') || !rel.endsWith('.json')) continue;
+    const area = rel.slice(0, rel.indexOf('/'));
+    const p = path.join(CORPUS, rel);
+    if (!fs.existsSync(p)) continue;
+    let doc;
+    try {
+      doc = JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch {
+      continue; // a malformed mirror is the hash check's problem, not this one
+    }
+    if (!Array.isArray(doc.cases)) continue;
+    counts[area] = (counts[area] ?? 0) + doc.cases.length;
   }
-  return total;
+  return counts;
+}
+
+/**
+ * The FLOOR: per area, the largest case count this repo has ever vendored.
+ *
+ * `cases` is an exact re-check of the checked-in tree and is rewritten on every
+ * re-vendor — so a corpus that SHRINKS core-side re-vendors to a smaller number
+ * and the exact check passes against it. The floor does not move down on its
+ * own: a re-vendor that would lower one fails and names the area, and
+ * --allow-corpus-shrink is the explicit, visible act of accepting it. That is
+ * the difference between recording a count and guarding one.
+ */
+function nextFloor(prevFloor, counts, allowShrink) {
+  const floor = { ...(prevFloor ?? {}) };
+  const shrunk = [];
+  for (const [area, n] of Object.entries(counts)) {
+    const was = floor[area] ?? 0;
+    if (n < was) shrunk.push(`${area}: ${was} case(s) vendored before, ${n} now`);
+    floor[area] = Math.max(was, n);
+  }
+  for (const area of Object.keys(floor)) {
+    if (!(area in counts)) shrunk.push(`${area}: ${floor[area]} case(s) vendored before, the area is GONE now`);
+  }
+  if (shrunk.length > 0 && !allowShrink) {
+    for (const s of shrunk) console.error(`vendor-conformance: CORPUS SHRANK: ${s}`);
+    fail(
+      `${shrunk.length} area(s) would vendor fewer cases than before. If core really did ` +
+        'drop them, re-run with --allow-corpus-shrink and say so in the story notes.',
+    );
+  }
+  if (allowShrink) {
+    for (const s of shrunk) console.log(`vendor-conformance: corpus shrink ACCEPTED (--allow-corpus-shrink): ${s}`);
+  }
+  return floor;
 }
 
 function write(coreDir) {
@@ -164,25 +254,47 @@ function write(coreDir) {
   const srcFiles = walk(src);
   reportExclusions(srcFiles);
   const files = srcFiles.filter((rel) => !excludedBy(rel));
+
+  // Files this repo mirrored BEFORE this run that core no longer carries (or
+  // that a new NOT_MIRRORED prefix now excludes): the mirror is a mirror, so
+  // they go. Declared-local paths are never touched.
+  const prev = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, 'utf8')) : {};
+  const keep = new Set(files);
+  for (const rel of Object.keys(prev.files ?? {})) {
+    if (keep.has(rel)) continue;
+    const dead = path.join(CORPUS, rel);
+    if (fs.existsSync(dead)) {
+      fs.rmSync(dead);
+      console.log(`vendor-conformance: removed conformance/${rel} \u2014 core no longer mirrors it here`);
+    }
+  }
+
   for (const rel of files) {
     const dest = path.join(CORPUS, rel);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(path.join(src, rel), dest);
   }
-  writeManifest(coreDir, files);
+  const counts = caseCounts(files);
+  const floor = nextFloor(prev.caseFloor, counts, args.includes('--allow-corpus-shrink'));
+  writeManifest(coreDir, files, counts, floor);
   console.log(`vendor-conformance: mirrored ${files.length} file(s) from core ${gitCommit(path.resolve(coreDir))}`);
-  console.log(`  prolog cases now: ${prologCaseCount()}`);
+  for (const [area, n] of Object.entries(counts)) {
+    console.log(`  ${area} cases now: ${n} (floor ${floor[area]})`);
+  }
 }
 
-function writeManifest(coreDir, files) {
+function writeManifest(coreDir, files, counts, floor) {
   const manifest = {
     description:
       'Provenance + drift guard for the vendored conformance corpus. `files` is a ' +
       'byte-for-byte mirror of packages/core/conformance; `local` is this repo’s own ' +
-      'and mirrors nothing. Regenerate with `npm run vendor:conformance -- --core <packages/core>`.',
+      'and mirrors nothing. `cases` is the exact per-area count of the checked-in tree; ' +
+      '`caseFloor` is the largest count ever vendored and never drops on its own. ' +
+      'Regenerate with `npm run vendor:conformance -- --core <packages/core>`.',
     source: '@insimul/core (packages/core/conformance)',
     coreCommit: coreDir ? gitCommit(path.resolve(coreDir)) : 'unknown',
-    prologCases: prologCaseCount(),
+    cases: counts,
+    caseFloor: floor,
     files: Object.fromEntries(
       files.map((rel) => [rel, sha256(fs.readFileSync(path.join(CORPUS, rel)))]),
     ),
@@ -219,18 +331,40 @@ function check(coreDir) {
     }
   }
 
-  const cases = prologCaseCount();
-  if (cases !== manifest.prologCases) {
-    problems.push(`prolog corpus holds ${cases} case(s), manifest records ${manifest.prologCases}`);
+  const counts = caseCounts(mirrored);
+  for (const [area, recorded] of Object.entries(manifest.cases ?? {})) {
+    if (counts[area] !== recorded) {
+      problems.push(`${area} corpus holds ${counts[area] ?? 0} case(s), manifest records ${recorded}`);
+    }
+  }
+  for (const area of Object.keys(counts)) {
+    if (!(area in (manifest.cases ?? {}))) {
+      problems.push(`${area} holds ${counts[area]} case(s) but the manifest records no count for it`);
+    }
+  }
+
+  // The floor. `cases` above catches an edit to the checked-in tree; this
+  // catches a re-vendor that legitimately rewrote `cases` downward (nextFloor).
+  const floor = manifest.caseFloor ?? {};
+  if (Object.keys(floor).length === 0) {
+    problems.push('VENDORED.json records no caseFloor \u2014 re-vendor with --core to establish one');
+  }
+  for (const [area, min] of Object.entries(floor)) {
+    const have = counts[area] ?? 0;
+    if (have < min) {
+      problems.push(`${area} corpus holds ${have} case(s), below the recorded floor of ${min}`);
+    }
   }
 
   if (problems.length > 0) {
     for (const p of problems) console.error(`vendor-conformance: ${p}`);
     fail(`${problems.length} corpus drift problem(s) — re-vendor with --core <packages/core>`);
   }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
   console.log(
-    `vendor-conformance: ${mirrored.length} mirrored file(s) consistent, ` +
-      `${cases} prolog cases, core ${manifest.coreCommit}`,
+    `vendor-conformance: ${mirrored.length} mirrored file(s) consistent, ${total} case(s) in ` +
+      `${Object.keys(counts).length} area(s) at or above floor \u2014 ` +
+      `${Object.entries(counts).map(([a, n]) => `${n} ${a}`).join(' / ')}, core ${manifest.coreCommit}`,
   );
 
   if (coreDir) {
@@ -265,5 +399,5 @@ if (checkOnly) {
 } else if (coreArg) {
   write(coreArg);
 } else {
-  fail('usage: vendor-conformance.mjs --core <path-to-packages/core> | --check [--core <path>]');
+  fail('usage: vendor-conformance.mjs --core <path-to-packages/core> [--allow-corpus-shrink] | --check [--core <path>]');
 }

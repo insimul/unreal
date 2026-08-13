@@ -1,0 +1,110 @@
+{
+  "id": "dark-courtyard",
+  "genre": "rpg",
+  "description": "The playable scene US-3 of tasklist 146 ships: a guard, a dark courtyard and a wall the player can only climb once a skill says so. Two adopted mechanics end to end — PERCEPTION decides whether the guard notices, TRAVERSAL decides whether the wall can be climbed — and every decision is made by core's own rule packs inside libinsimul. Nothing in the engine reimplements one. AInsimulMechanicSampleScene reads this file, so changing the scenario changes the scene; ctest `activation_witness` reads the SAME file and executes it through insimul::InsimulKB, which is what makes 'the scene exercises them' a checked statement rather than a screenshot.",
+  "world": [
+    "senses(guard, sight, 12)",
+    "senses(guard, hearing, 8)",
+    "at_location(guard, courtyard)",
+    "at_location(player, courtyard)",
+    "restricted_area(courtyard)",
+    "access_permitted(guard, courtyard)",
+    "traversal_link(courtyard, rooftop, climb)",
+    "traversal_requires(courtyard, rooftop, has_skill(Actor, climbing, 2))",
+    "skill_defined(climbing, athletics)",
+    "skill_max_level(climbing, 5)"
+  ],
+  "steps": [
+    {
+      "name": "the guard does not notice the player in the dark",
+      "mechanic": "perception",
+      "hostFacts": [
+        {
+          "fact": "near(guard, player, 12)",
+          "from": "IPerceptionProbe",
+          "note": "FInsimulPerceptionProbe: the distance between the two AActor locations, converted from Unreal units into the sense's own range units",
+          "probe": "near",
+          "args": {
+            "observer": "guard",
+            "target": "player",
+            "range": "12"
+          }
+        },
+        {
+          "fact": "line_of_sight(guard, player)",
+          "from": "IPerceptionProbe",
+          "note": "FInsimulPerceptionProbe: LineTraceSingleByChannel from the guard's eye socket to the target, obstructed by the crates",
+          "probe": "lineOfSight",
+          "args": {
+            "observer": "guard",
+            "target": "player"
+          }
+        }
+      ],
+      "facts": [
+        "light_level(courtyard, 5)",
+        "noise_level(player, 10)"
+      ],
+      "goal": "detects(guard, player)",
+      "expect": "fails",
+      "then": "the scene leaves the guard on patrol"
+    },
+    {
+      "name": "the wall refuses a player with no climbing skill",
+      "mechanic": "traversal",
+      "hostFacts": [
+        {
+          "fact": "movement_mode(player, climb)",
+          "from": "ITraversalProbe",
+          "note": "FInsimulTraversalProbe: the movement mode UCharacterMovementComponent reports when the pawn reaches the wall",
+          "probe": "movementMode",
+          "args": {
+            "actor": "player",
+            "mode": "climb",
+            "from": "courtyard",
+            "to": "rooftop"
+          }
+        }
+      ],
+      "facts": [],
+      "goal": "can_traverse(player, courtyard, rooftop)",
+      "expect": "fails",
+      "then": "the scene plays the refusal and the player stays in the courtyard"
+    },
+    {
+      "name": "the same wall opens once the world grants the skill",
+      "mechanic": "traversal",
+      "hostFacts": [],
+      "facts": [
+        "has_skill(player, climbing, 2)"
+      ],
+      "goal": "can_traverse(player, courtyard, rooftop)",
+      "expect": "succeeds",
+      "then": "ILocomotionHost carries the body up; core decided that it MAY happen and never how it looks"
+    },
+    {
+      "name": "the lit torch is what the guard notices — the same query, a different world",
+      "mechanic": "perception",
+      "retract": [
+        "light_level(courtyard, 5)"
+      ],
+      "facts": [
+        "light_level(courtyard, 60)"
+      ],
+      "hostFacts": [],
+      "goal": "detects(guard, player)",
+      "expect": "succeeds",
+      "then": "the scene raises the alarm"
+    },
+    {
+      "name": "an inactive module is ABSENT, not merely unpopulated",
+      "mechanic": "stamina",
+      "inactive": true,
+      "hostFacts": [],
+      "facts": [],
+      "goal": "current_predicate(can_afford_stamina/2)",
+      "expect": "fails",
+      "then": "the rpg bundle does not select stamina, so its pack was never consulted and its vocabulary does not exist in this KB — core's module contract §7.3, from inside the running scene"
+    }
+  ]
+}

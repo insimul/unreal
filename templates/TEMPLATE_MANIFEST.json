@@ -104,6 +104,66 @@
       "placeholders": []
     },
     {
+      "path": "project/Content/Data/insimul/README.md",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/modules/genre-activation.json",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/PACKS.json",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/agentAi.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/combat.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/equipment.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/gameplayState.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/map.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/perception.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/routine.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/scaffold.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/skill.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/stamina.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/packs/traversal.pl",
+      "placeholders": []
+    },
+    {
+      "path": "project/Content/Data/insimul/scenarios/dark-courtyard.json",
+      "placeholders": []
+    },
+    {
       "path": "project/DefaultEngine.ini",
       "placeholders": []
     },
@@ -364,6 +424,78 @@
     },
     {
       "path": "source/data/WaterFeatureData.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulActorRegistry.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulActorRegistry.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulCombatHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulCombatHost.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulGeometryProbes.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulGeometryProbes.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulLocomotionHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulLocomotionHost.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicHostBinder.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicHostBinder.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicSampleScene.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicSampleScene.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulModuleActivator.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulModuleActivator.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSkillModifierSink.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSkillModifierSink.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSurvivalHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSurvivalHost.h",
       "placeholders": []
     },
     {

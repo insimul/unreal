@@ -12,6 +12,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Modules activated from the genre bundle, not from a hardcoded list (US-3 of 146).**
+  An exported game now reads which mechanic modules this world turns on out of the
+  table core emits, consults exactly the rule packs they own, and unregisters every
+  host no active module names. Adding a module to a genre bundle in core is a
+  re-vendor here and **no engine code change** — `check:activation` fails if a module
+  id or a pack area ever appears in an activation source.
+  - `Source/InsimulRuntime/Portable/InsimulModuleActivation.{h,cpp}` resolves a genre
+    against the vendored table, keeping core's three answers apart exactly as
+    module-contract §7.3 states them: a KNOWN genre gets its modules; an UNKNOWN one
+    gets the shared vocabulary and nothing else; **no genre declared** gets every pack
+    (right for a commandlet, a warning in a game). `EInsimulGenreSource` reports which
+    of the three happened and who said so.
+  - `Portable/InsimulModulePacks.{h,cpp}` consults the active packs **in core's
+    consult order** (a hard constraint — a `:- dynamic` after a clause is a
+    `permission_error`) and names every pack it refused to consult.
+    `FInsimulMechanicHosts::RestrictTo` is the other half of §7.3's cost: a wired host
+    whose interface no active module names is unregistered, and the drop is logged.
+  - **The rule packs are vendored as data the game ships.** No C ABI row returns a
+    pack (`core.methods` still answers with five names), so
+    `tools/vendor-packs/vendor-packs.mjs` mirrors core's eleven `PREDICATE_PACKS`
+    byte-for-byte into `templates/project/Content/Data/insimul/packs/` behind a
+    manifest carrying core's commit, a sha256 and the consult order. It **executes**
+    core rather than parsing it, resolving a runner (`vite-node`, else `esbuild` +
+    node) instead of requiring one. RUNTIME_CORE_ADOPTION.md §14.1 asks core for the
+    `prolog.packs` row that would delete all of it.
+  - **A playable scene, whose script is a file.** `AInsimulMechanicSampleScene` builds
+    a guard, a dark courtyard and a wall: the probes measure, core's own packs decide
+    (`detects/2`, `can_traverse/3`), the scene executes the answer. Its steps live in
+    `Content/Data/insimul/scenarios/dark-courtyard.json`, so ctest
+    `activation_witness` runs the same five steps through the same library — **2
+    mechanics end to end**, as a gate rather than a screenshot.
+  - **New gates.** `check:packs` and `check:activation` (six negative controls) are
+    toolchain-free; ctest **`module_activation`** (444 checks) drives the resolver,
+    the consult, the host restriction and the scenario runner over the data a build
+    reads, with no library; ctest **`activation_witness`** is the only honest witness
+    for "an inactive module contributes nothing" — for all 8 genres × 11 packs, each
+    pack's own signature predicate is in a real KB **exactly when** its module is
+    active, and `current_predicate(can_afford_stamina/2)` has no solutions in an `rpg`
+    world. 17 ctest legs with binaries, 12 without.
+  - **Three findings, all core-side (§14).** The activation table names packs the C
+    ABI cannot hand over (§14.1); a `SaveFile`'s `worldSnapshot` carries no genre, so
+    a resumed game cannot resolve its own module set (§14.2); and an authored
+    requirement naming an INACTIVE module's vocabulary **raises** rather than failing —
+    measured here independently under `adventure` as
+    `existence_error(procedure, has_skill/3)`, and pinned so that fixing it core-side
+    fails this repo and closes the finding (§14.3).
+- **The band-120 conformance corpora, vendored AND executed (US-2 of 146).**
+  `conformance/` grew from 34 mirrored files to **64** at core `76782e5` — the seven
+  band-120 decision areas (`combat/`, `items/`, `routines/`, `skills/`, `stealth/`,
+  `traversal/`), the module-activation table, and ten new Prolog packs. 529 cases in
+  ten areas.
+  - **`prolog_corpus` — the corpus is EXECUTED now.** `conformance/prolog/` used to be
+    checked for provenance only: present, hashed, byte-identical to core, and run by
+    nothing this repo could invoke. `tools/verify-unreal/test_prolog_corpus.cpp` drives
+    all **255 cases** — including the **125 band-120 `mechanic-*` cases** — through
+    `insimul::InsimulKB`, the plugin's own `libinsimul` wrapper (the same class
+    `UInsimulPrologSubsystem` wraps), and diffs core's golden solution sets as an
+    unordered multiset. 255/255. It carries a case floor, a required-pack list, live /
+    negative / syntax controls, and it checks the one documented corpus amendment
+    **both ways** — a rewrite that matches nothing fails as stale, and a case that
+    starts passing unamended fails as obsolete.
+  - **`check:mechanic-corpora` — the decision half, measured rather than pretended.**
+    The other 212 cases cannot be executed in any language: reaching a decision layer
+    means a row in `native/corebridge/js/entry.js` and there are none. The new gate
+    pins every area, file and case count; requires every `executedBy` to name a file
+    that exists and a ctest target CMake registers; requires every unexecuted area to
+    state its blocker; mirrors the bridge method list from `test_mechanic_hosts.cpp`
+    so an ARRIVING mechanic row fails as loudly as a vanishing one; checks the
+    vendored genre-activation table against `MODULE_HOSTS.json`; and proves all of it
+    can fail with **eleven negative controls**.
+- **The band-120 mechanic host half — eight interfaces, implemented (US-1 of 146).**
+  Core's seven mechanic modules in band 120–125 name eight distinct host interfaces
+  (`ICombatSystem`, `ISurvivalSystem`, `ICombatStatSink`, `ITrajectoryProbe`,
+  `IPerceptionProbe`, `ITraversalProbe`, `ILocomotionHost`, `ISkillModifierSink`).
+  All eight now have an Unreal implementation and **none is stubbed**.
+  - `Source/InsimulRuntime/Portable/InsimulMechanicContracts.h` is the std-only
+    mirror of the interfaces and their payloads; `InsimulMechanicHosts.{h,cpp}` holds
+    the fallback core documents for every empty slot (absent or unanswering probe
+    reads as clear / no reading / passable / arrived) implemented **once**, plus
+    `ConsequenceOf()` — what leaving each hook empty costs, as data a report prints
+    rather than a comment.
+  - `templates/source/mechanics/` is the engine half: an actor/location registry,
+    a combat roster (`ICombatSystem` + `ICombatStatSink`), three geometry probes over
+    `LineTraceSingleByChannel` and `UNavigationSystemV1`, a locomotion host over
+    `AAIController::MoveToLocation`, a skill-modifier sink, a survival host over the
+    template's own `USurvivalSystem`, and `UInsimulMechanicHostBinder` — the one
+    reflected surface a creator wires.
+  - **Measured, not assumed: no mechanic is reachable in any build that ships
+    today.** `insimul::FInsimulMechanicSurface` asks the library `core.methods` and
+    reports per module; the shipped `libinsimulcore` answers with five methods and no
+    mechanic row, so every module is `BridgeHasNoRow` and the host half is implemented
+    and **inert**. The boot log says exactly that rather than letting a combat host
+    imply combat is wired. `RUNTIME_CORE_ADOPTION.md` §12 is the write-up, including
+    the three findings that must be answered before the rows can be written at all.
+- **`check:mechanics` — the mirror's drift guard (US-1 of 146).**
+  `tools/verify-mechanics/check-mechanics.mjs`, now part of `npm run check`, pins
+  every band-120 module and every interface member against
+  `MODULE_HOSTS.json` (core's commit plus the sha256 of the three files it was derived
+  from), and requires each interface to be implemented or listed in `stubbed` with a
+  stated consequence. `--core <packages/core>` re-derives it all from core's
+  TypeScript; four negative controls prove each check can fail. A port of Unity's
+  script of the same name — one mechanism across the engine repos.
+- **`ctest mechanic_hosts` / `mechanic_bridge` (US-1 of 146).** The portable half is
+  EXECUTED: 106 checks over the mirror, the fallbacks and all four surface states with
+  no engine and no native library, and 120 with the real `libinsimulcore` — the
+  bridge leg pins the whole method list, so a mechanic row **arriving** fails as
+  loudly as one disappearing.
+- **`npm run check:host:binaries` — this harness's `--require-binaries`.**
+  `-DINSIMUL_REQUIRE_BINARIES=ON` turns the configure-time "no libinsimulcore found"
+  warning into a hard failure. `check:full` is now `check` + that. `check:host` stays
+  permissive so a standalone clone still runs the toolchain-free gates.
+
+### Changed
+- `USurvivalSystem` gained `HasNeed`, `GetNeedIds`, `GetNeedMax`, `GetNeedDecayRate`,
+  `IsNeedCritical`, `IsNeedWarning`, `SetEnabled`/`IsEnabled` and a `bEnabled` gate on
+  `Update` — `getNeed`, `getAllNeeds`, `setEnabled` and `isEnabled` are members of the
+  interface core's `stamina` module declares and none of them had a reader here.
+  A disabled clock keeps its values, so re-enabling resumes rather than restarts.
+- `UInsimulRadiantSourceShell` exposes a non-reflected `GetCoreCaller()`, so another
+  adopted slice shares the **one** libinsimulcore runtime instead of starting a second
+  QuickJS. `Source/InsimulRuntime/Portable/` is now on the module's public include
+  path: the mechanic contracts are a boundary the exported game implements, and that
+  cannot be a private header.
+
 - **Quest-parity diff — `quest_parity` / `quest_parity_core` (US-3 of 99).** Two
   new `tools/verify-unreal` ctest targets that run the shared quest corpus
   (`conformance/quests/{hydration,radiant}-cases.json`, 4 + 3 cases) through
@@ -186,6 +310,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `npm run engines:check`. Policy + editor loop documented in `docs/reimport.md`;
   human checklist in `VERIFICATION.md` (US-XG4). `InsimulEditor.Build.cs` gains
   `AssetRegistry` + `Blutility`/`UMG`/`UMGEditor` deps for the utility widget.
+- **`VENDORED.json` guards a floor, not just hashes (US-2 of 146).** The manifest gained
+  `cases` (exact per-area counts, re-derived on `--check`) and `caseFloor` (the largest
+  count ever vendored, which never drops on its own). Hashes cannot see a corpus
+  *shrink* — a trimmed `cases` array re-hashes clean — so a re-vendor that would lower a
+  floor now fails and names the area; `--allow-corpus-shrink` is the explicit act of
+  accepting one. `--core` re-vendoring also prunes mirrors core has dropped. Mechanism,
+  flag names and manifest keys ported unchanged from Unity (tasklist 145 US-2).
+- **Corpora core ships and this repo deliberately does not mirror are now declared.**
+  `editor/`, `generation/`, `ai/`, `map/` and `grounding/` each carry a stated reason and
+  are printed with a file count on every `--core` run, so a corpus for an unadopted
+  surface stops reading as drift.
+- `npm run check` gained `check:mechanic-corpora`; `check:host:binaries` gained the
+  `prolog_corpus` leg (15 ctest legs, up from 14).
+
+### Fixed
+- **Re-measured and documented: the `libinsimul` KB-lifetime defects are gone.** Unity's
+  probe spawns a fresh process per Prolog case because the library it measured (git
+  `f1548a4`) aborted on the second `insimul_kb_destroy` in a process and broke
+  library-module loading after ~64 leaked KBs. Against the shipping library (git
+  `e019244`, trealla v2.106.1): 200 create/consult/query/destroy cycles in one process,
+  clean. `prolog_corpus` therefore runs all 255 cases in-process — and is now the
+  standing regression test for both defects. `RUNTIME_CORE_ADOPTION.md` §13.2.
 
 ### Notes
 - `EngineVersion` is intentionally left unset: this is a source plugin that builds
