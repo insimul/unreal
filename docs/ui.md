@@ -162,9 +162,11 @@ Before tasklist 190 US-1 this section named `tools/verify-unreal/run-ui-tests.sh
 `npm run engines:unreal:ui`. Neither exists in this repository: the four UI host
 tests under `Source/InsimulRuntime/Tests/` were compiled and run by nothing, so "the
 registry tests pass on the shared cases" was a claim with no gate behind it. The
-registry/loading/theme/gate leg is a ctest target now; `test_quest_journal.cpp`,
-`test_trade.cpp` and `test_dialogue_ui.cpp` are still orphaned and are US-2/US-3's
-to wire.
+registry/loading/theme/gate leg is a ctest target now. US-2 wired the rest of its
+half: `test_quest_journal.cpp` is ctest `ui_quest_journal`, `test_trade.cpp` is
+`ui_trade`, `test_ui_state_binding.cpp` is `ui_state_binding` and
+`test_skill_tree.cpp` is `ui_skill_tree`. `test_dialogue_ui.cpp` is still orphaned
+and is US-3's to wire.
 
 ## Quest panels + notifications (US-XU2)
 
@@ -242,6 +244,104 @@ quantities + gold + failure reasons) and the state-location invariant (reads ret
 the live currentState arrays, two models never share, every op conserves the item /
 gold census, a detached model fails safely). Wired into `npm run engines:check`
 under the Unreal block.
+
+## The play panels — one store, one view-model each (tasklist 190 US-2)
+
+Every panel below is backed EXCLUSIVELY by `save.currentState` (platform/CLAUDE.md):
+`Portable/InsimulUIStateBinding.{h,cpp}` is the one place a panel's slice is read out
+of a real `SaveFile` and written back into it, and ctest `ui_state_binding` asserts
+after every op that the change is in the save's canonical bytes, that a re-hydrate
+reproduces it, that everything OUTSIDE `currentState` is byte-identical, and that the
+item + gold census is conserved.
+
+| panel key | widget | owning module | view-model |
+| --- | --- | --- | --- |
+| `inventory` / `container` / `merchant` | `UInsimulInventoryPanel` / `UInsimulContainerPanel` / `UInsimulMerchantPanel` | equipment | `InsimulTradeModel` + `InsimulTradePricing` |
+| `equipment` | `UInsimulEquipmentPanel` | equipment | `InsimulEquipmentModel` |
+| `skill_tree` | `UInsimulSkillPanel` | skill | `InsimulSkillTreeModel` |
+| `minimap` / `world_map` | `UInsimulMinimapPanel` / `UInsimulWorldMapPanel` | map | — (host-supplied pins) |
+| `quickbar` / `radial_menu` | `UInsimulQuickBar` / `UInsimulRadialMenu` | — | — (host-supplied entries) |
+| `notice_board` | `UInsimulNoticeBoard` | — | `InsimulQuestJournalModel` |
+| `documents` | `UInsimulDocumentPanel` | — | — (authored content) |
+| `hud` | `UInsimulHUDPanel` | — | the panel surface itself |
+
+### Skill tree — `InsimulSkillTreeModel` → `UInsimulSkillPanel`
+
+A skill panel is **a value core returns, not a callback it invokes** (module contract
+§3 forbids a UI hook on the C ABI), so what the four engine legs share is the
+view-model and what differs is how each of them paints it.
+`Portable/InsimulSkillTreeModel.{h,cpp}` is core's `skills/skill-view.ts` in C++: for
+each authored tree it derives the header (level, cap, banked XP, the next level's
+price off the world's own curve, the pool and what the taken nodes have spent) and,
+per node, the row it sits on (from the authored PARENT EDGES, never a `tier` field),
+its cost, its requirements with parents desugared into one gate, whether it is taken
+or available, and the refusal when it is not — in core's `SKILL_UNLOCK_REFUSALS`
+order `unknown → owned → points → requires → forbidden`.
+
+Two of those rungs are **handed in, never computed**: `unmet` (authored goals the
+rules layer did not satisfy) and `forbidden` (what `permissible/3` refused) are the
+KB's answers, and a pure function that guessed one would be inventing it. A caller
+with no KB passes neither and gets nodes that read `conditional` — "core has nothing
+against this, and something core cannot evaluate might".
+
+Nothing in the file knows a node: labels fall back to ids, the effect kind set is
+OPEN (`sings(the_masons_round)` rides through untouched), and every derived list is
+sorted by id while authored order is preserved.
+
+### HUD, maps, quick bar, documents
+
+- **`UInsimulHUDPanel`** holds no list of what a HUD contains. Its slots are catalog
+  KEYS, and it asks `UInsimulUIPanelSurface` which of them this world may show; a
+  withheld slot lands in `WithheldSubPanels()` and in `Describe()`, never silently
+  missing. This is the one place the gate becomes visible to a player.
+- **`UInsimulMinimapPanel` / `UInsimulWorldMapPanel`** project host-supplied pins —
+  the corner map around the player within a range, the fullscreen map over a world
+  rect. Both projections are total (a zero range / degenerate rect centres rather
+  than dividing). Fast travel is a REQUEST broadcast to the host: whether a world
+  lets an actor cross it is the simulation's answer, not a panel's.
+- **No discovery or read/unread state is invented.** The save envelope declares no
+  map or document slice (see `conformance/saves`), so those flags are the host's and
+  the panels never write one back — the same restraint the equipment model shows
+  about equipping. Inventing a `currentState.map` schema in one engine port is
+  exactly how four legs stop agreeing about what a save contains.
+- **`UInsimulQuickBar`** takes the SAME `FInsimulRadialEntry` the wheel does, because
+  the two are input surfaces over one set of shortcuts; a second entry struct would
+  be the drift itself. A disabled entry is shown and greyed, never hidden.
+- **`UInsimulDocumentPanel`** paginates by a character budget over the source text
+  rather than by rendered layout, so a page break is the same on four engines and two
+  resolutions.
+
+### Tests
+
+- ctest **`ui_skill_tree`** (`test_skill_tree.cpp`) drives all six cases of
+  `conformance/skills/trees.json` and diffs the canonical projection byte for byte,
+  plus the `funded` (`skill_tree/2` read backwards) and `depths` read-outs — 39
+  checks including 18 negative controls: funding the pool moves a `points` refusal,
+  dropping the KB's answers moves `requires` and `forbidden`, an unmet goal outranks
+  a prohibition, an authored parent edge moves a node's row, a cyclic tree
+  terminates, and a level past the end of the curve repeats its last price instead of
+  becoming free.
+- ctest **`ui_state_binding`** covers the shop + reputation corpus, the equipping
+  corpus and the state-location invariant.
+- `npm run check:panels` closes the gap between the catalog and the widgets an
+  exported game actually builds: every catalog row names a WBP that
+  `GenerateInsimulContent.py` generates AND binds to that key, no spec claims a key
+  the catalog lacks, and every spec's parent is a `UUserWidget` this repository
+  ships. Rows nothing serves yet print as PENDING with the story that owes them (as
+  of US-2: `main_menu`, `pause_menu`, `save_load` — US-3's — and `quest_journal`,
+  whose export-module widget declares no bound children). Five negative controls.
+
+### A note on the export module's prototypes
+
+`templates/source/ui/` still carries the pre-registry prototypes
+(`UInsimulSkillTreePanel` with its hardcoded five tiers, `UInsimulMinimap`,
+`UInsimulWorldMap`, `UInsimulDocumentReader`, `UInsimulActionQuickBar`,
+`UInsimulHUD`). They are no longer what the panel catalog resolves — the WBP specs
+now name the plugin's panels — and the plugin's classes are named apart from them
+(`…Panel` suffixes) because a UObject class name is global and two `UInsimulMinimap`s
+in one project do not link. Deleting the prototypes is a separate change from
+landing their replacements.
+
 
 ## Dialogue panel + pause/main menu + save/load (US-XU4)
 

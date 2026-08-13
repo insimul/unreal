@@ -70,6 +70,10 @@ set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/items")
 if(NOT EXISTS "${ITEMS_DIR}")
   set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/items")
 endif()
+set(SKILLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/skills")
+if(NOT EXISTS "${SKILLS_DIR}")
+  set(SKILLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/skills")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
 
@@ -347,6 +351,28 @@ target_compile_definitions(insimul_verify_ui_state_binding PRIVATE
 )
 target_compile_options(insimul_verify_ui_state_binding PRIVATE ${WARN_FLAGS})
 add_test(NAME ui_state_binding COMMAND insimul_verify_ui_state_binding)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The SKILL panel (190 US-2). A skill tree is a value core returns rather than a
+# callback it invokes (module contract §3), so the four engine legs share the
+# view-model in conformance/skills/trees.json and differ only in how they paint
+# it. This leg drives all six cases through FInsimulSkillTreeModel and diffs the
+# canonical projection byte for byte, plus the `funded` and `depths` read-outs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_skill_tree
+    "${RUNTIME_DIR}/Tests/test_skill_tree.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSkillTreeModel.cpp"
+)
+target_include_directories(insimul_verify_ui_skill_tree PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_skill_tree PRIVATE
+    INSIMUL_SKILLS_DIR="${SKILLS_DIR}"
+)
+target_compile_options(insimul_verify_ui_skill_tree PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_skill_tree COMMAND insimul_verify_ui_skill_tree)
 
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it

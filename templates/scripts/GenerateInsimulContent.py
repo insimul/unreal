@@ -172,20 +172,26 @@ WIDGET_SPECS = {
         ],
     },
     "WBP_ActionQuickBar": {
-        "parent": "InsimulActionQuickBar",
+        # The shortcuts bar. It takes the SAME entries the radial wheel holds
+        # (FInsimulRadialEntry), because the two are input surfaces over one set of
+        # shortcuts and a second entry struct would be the drift itself.
+        "parent": "InsimulQuickBar",
+        "panel_key": "quickbar",
         "children": [
-            ("UHorizontalBox", "SlotsContainer"),
+            ("UHorizontalBox", "SlotContainer"),
+            ("UTextBlock", "EmptyBarText"),
         ],
     },
     "WBP_DocumentReader": {
-        "parent": "InsimulDocumentReader",
+        # Letters, books and notices — authored content rather than a mechanic, so
+        # every genre bundle carries it. Page turns are C++ (a character budget over
+        # the source text, which reads the same on four engines).
+        "parent": "InsimulDocumentPanel",
+        "panel_key": "documents",
         "children": [
             ("UTextBlock", "TitleText"),
-            ("UTextBlock", "ContentText"),
+            ("UTextBlock", "BodyText"),
             ("UTextBlock", "PageCounterText"),
-            ("UButton", "PrevPageButton"),
-            ("UButton", "NextPageButton"),
-            ("UButton", "CloseButton"),
         ],
     },
     "WBP_GameMenu": {
@@ -240,18 +246,13 @@ WIDGET_SPECS = {
         ],
     },
     "WBP_Minimap": {
-        "parent": "InsimulMinimap",
+        # The HUD corner map, owned by the world's map module: a world whose genre
+        # bundle did not select it never resolves this panel at all.
+        "parent": "InsimulMinimapPanel",
+        "panel_key": "minimap",
         "children": [
-            # Required BindWidget — the widget fails to construct without these.
-            ("UImage", "MinimapImage"),
-            ("UCanvasPanel", "MarkerCanvas"),
-            ("UImage", "PlayerArrow"),
-            ("UOverlay", "CompassOverlay"),
-            # Optional
-            ("UButton", "LegendButton"),
-            ("UButton", "FullscreenButton"),
-            ("UButton", "CollapseButton"),
-            ("UVerticalBox", "LegendPanel"),
+            ("UCanvasPanel", "MarkerContainer"),
+            ("UTextBlock", "PlaceNameText"),
         ],
     },
     "WBP_QuestOfferPanel": {
@@ -272,6 +273,99 @@ WIDGET_SPECS = {
         "children": [
             ("UTextBlock", "TrackerHeaderText"),
             ("UVerticalBox", "ObjectiveListBox"),
+        ],
+    },
+    # ── tasklist 190 US-2: the play panels, each backed by a portable view-model
+    # the host tests drive (ctest ui_state_binding / ui_skill_tree / ui_trade /
+    # ui_quest_journal). Every one of them carries a panel_key, so the registry the
+    # exported game resolves through binds it and a creator can swap it for their
+    # own WBP without touching engine code.
+    "WBP_Inventory": {
+        "parent": "InsimulInventoryPanel",
+        "panel_key": "inventory",
+        "children": [
+            ("UVerticalBox", "ItemListBox"),
+            ("UTextBlock", "GoldText"),
+            ("UTextBlock", "EmptyText"),
+        ],
+    },
+    "WBP_Container": {
+        "parent": "InsimulContainerPanel",
+        "panel_key": "container",
+        "children": [
+            ("UVerticalBox", "ContainerListBox"),
+            ("UTextBlock", "TitleText"),
+            ("UButton", "TakeAllButton"),
+        ],
+    },
+    "WBP_ShopPanel": {
+        # Shop + reputation: the price is a function of the simulation (the
+        # merchant's markup, the shelf, the player's standing with the faction the
+        # shop answers to), never a shop table.
+        "parent": "InsimulMerchantPanel",
+        "panel_key": "merchant",
+        "children": [
+            ("UVerticalBox", "MerchantListBox"),
+            ("UVerticalBox", "PlayerListBox"),
+            ("UTextBlock", "MerchantNameText"),
+            ("UTextBlock", "PlayerGoldText"),
+            ("UTextBlock", "MerchantGoldText"),
+        ],
+    },
+    "WBP_EquipmentPanel": {
+        "parent": "InsimulEquipmentPanel",
+        "panel_key": "equipment",
+        "children": [
+            ("UVerticalBox", "SlotListBox"),
+            ("UTextBlock", "ArmorText"),
+            ("UTextBlock", "WeightText"),
+            ("UTextBlock", "EncumberedText"),
+        ],
+    },
+    "WBP_SkillTree": {
+        # Tiers and unlocks over the skill module's progression layer. Every number
+        # on it — a node's row, its price, the cap, the curve — comes from the
+        # portable view-model, which is core's `skill-view` in C++.
+        "parent": "InsimulSkillPanel",
+        "panel_key": "skill_tree",
+        "children": [
+            ("UVerticalBox", "TreeListBox"),
+            ("UTextBlock", "EmptyPanelText"),
+        ],
+    },
+    "WBP_WorldMap": {
+        "parent": "InsimulWorldMapPanel",
+        "panel_key": "world_map",
+        "children": [
+            ("UCanvasPanel", "MarkerContainer"),
+            ("UTextBlock", "SelectionLabelText"),
+        ],
+    },
+    "WBP_RadialMenu": {
+        "parent": "InsimulRadialMenu",
+        "panel_key": "radial_menu",
+        "children": [
+            ("UVerticalBox", "WedgeContainer"),
+            ("UTextBlock", "SelectionLabelText"),
+        ],
+    },
+    "WBP_NoticeBoard": {
+        "parent": "InsimulNoticeBoard",
+        "panel_key": "notice_board",
+        "children": [
+            ("UVerticalBox", "NoticeListBox"),
+            ("UTextBlock", "EmptyBoardText"),
+        ],
+    },
+    "WBP_HUD": {
+        # The frame itself is unconditional; its slots are catalog keys it asks the
+        # panel surface about, so which of them a world shows is the module data's
+        # answer and not this script's.
+        "parent": "InsimulHUDPanel",
+        "panel_key": "hud",
+        "children": [
+            ("UOverlay", "SlotContainer"),
+            ("UTextBlock", "DiagnosticText"),
         ],
     },
 }

@@ -12,6 +12,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The play panels, backed only by `save.currentState` (US-2 of 190).** Quest
+  journal / tracker / offer, inventory / containers / equipment, shop + reputation,
+  the skill tree, the HUD and its map / quick-bar / wheel sub-panels, the notice
+  board and the document reader. Every one resolves through the module registry, and
+  every one that shows playthrough data reads it out of the save file and nowhere
+  else.
+  - **One store.** `Portable/InsimulUIStateBinding.{h,cpp}` is the single place a
+    panel's slice is hydrated out of a real `SaveFile` and applied back into
+    `currentState` — trade (`player.gold` / `player.inventory` /
+    `containers.containers` / `npcs.merchantStates`), quests (`quests.progress` /
+    `quests.dynamicQuests`, with the TITLE coming from the quest system's Prolog
+    content rather than the snapshot's `name`), the market a shop prices in (the
+    merchant's markup joined to the player's standing in `currentState.reputation`)
+    and the item ledger the equipment panel reads. There is deliberately no
+    equipment WRITE path: wearing a thing is the items module's decision layer, and
+    inventing a `currentState.player.equipped` schema in one engine port is how four
+    legs stop agreeing about what a save contains.
+  - **The skill panel is a VALUE core returns, not a callback it invokes** (module
+    contract §3). `Portable/InsimulSkillTreeModel.{h,cpp}` is core's
+    `skills/skill-view.ts` in C++: rows derived from the authored parent EDGES rather
+    than a `tier` field, prices off the world's own curve, labels falling back to
+    ids, an OPEN effect-kind set, and the refusal ladder in core's own order
+    (`unknown → owned → points → requires → forbidden`). The two rungs only a KB can
+    answer — an unmet authored goal and a prohibition — are handed in, never guessed.
+  - **The HUD holds no list of what a HUD contains.** `UInsimulHUDPanel`'s slots are
+    catalog keys it asks `UInsimulUIPanelSurface` about, so a world without the map
+    module has no minimap and the HUD SAYS SO (`WithheldSubPanels()` / `Describe()`)
+    instead of quietly missing one. The maps project host-supplied pins totally (a
+    zero range / degenerate rect centres rather than dividing) and fast travel is a
+    request broadcast to the host, never a teleport a panel performs. No discovery or
+    read/unread state is invented: the save envelope declares no map or document
+    slice, so those flags are the host's and no panel writes one back.
+  - **Gates.** ctest **`ui_skill_tree`** drives all six cases of
+    `conformance/skills/trees.json` — the view-model the Babylon reference and the
+    Unity/Godot ports run — and diffs the canonical projection byte for byte plus the
+    `funded` and `depths` read-outs: 39 checks, 18 of them negative controls. ctest
+    **`ui_state_binding`** covers the pricing + equipping corpora and the
+    state-location invariant. 22 ctest legs with binaries (was 18).
+  - **`npm run check:panels`** is new, and it closes a gap `ui_registry` structurally
+    cannot see: a catalog row can name a WBP that nothing generates, so the key
+    resolves "available" and then renders an asset path that does not exist. The gate
+    pins every catalog row to a `GenerateInsimulContent.py` spec bound to that key,
+    refuses a spec that claims a key the catalog lacks or names a parent class this
+    repo does not ship, and prints the rows nothing serves yet as PENDING with the
+    story that owes them (`main_menu`, `pause_menu`, `save_load` — US-3's — and
+    `quest_journal`). Five negative controls.
+  - **The export generator now builds the whole US-2 set.** `WBP_SkillTree`,
+    `WBP_WorldMap`, `WBP_HUD`, `WBP_Inventory`, `WBP_Container`, `WBP_ShopPanel`,
+    `WBP_EquipmentPanel`, `WBP_RadialMenu` and `WBP_NoticeBoard` are generated and
+    registered under their panel keys, and `WBP_Minimap` / `WBP_ActionQuickBar` /
+    `WBP_DocumentReader` were repointed from the export module's pre-registry
+    prototypes to the plugin's panels (and given the panel keys they never carried).
+    The prototypes in `templates/source/ui/` are untouched and unreferenced by the
+    catalog; the plugin's classes carry `…Panel` suffixes because a UObject class
+    name is global.
+
 - **Every default-UI panel resolves through the module registry (US-1 of 190).**
   A panel is now two questions, answered in two layers: which widget serves a key
   (the registry, with the creator override on top) and whether this world has the
