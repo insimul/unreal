@@ -8,6 +8,7 @@
 #include "Engine/GameInstance.h"
 #include "HAL/FileManager.h"
 #include "InsimulPrologSubsystem.h"
+#include "InsimulUIPanelSurface.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -171,6 +172,7 @@ bool UInsimulModuleActivator::ActivateFromWorldIr()
     }
 
     bResolved = true;
+    ApplyToPanelSurface();
     return ConsultActive();
 }
 
@@ -184,7 +186,20 @@ bool UInsimulModuleActivator::ActivateForGenre(const FString& GenreId)
         ToStdString(GenreId), Manifest.ConsultOrder(),
         GenreId.IsEmpty() ? insimul::EInsimulGenreSource::Undeclared : insimul::EInsimulGenreSource::Declared);
     bResolved = true;
+    ApplyToPanelSurface();
     return ConsultActive();
+}
+
+void UInsimulModuleActivator::ApplyToPanelSurface()
+{
+    UGameInstance* Instance = GetGameInstance();
+    UInsimulUIPanelSurface* Surface = Instance ? Instance->GetSubsystem<UInsimulUIPanelSurface>() : nullptr;
+    if (Surface == nullptr)
+    {
+        // A commandlet or a headless run with no UI surface. Nothing to gate.
+        return;
+    }
+    Surface->ApplyModuleSet(ActiveSet);
 }
 
 bool UInsimulModuleActivator::ConsultActive()

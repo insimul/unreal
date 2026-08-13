@@ -16,8 +16,15 @@ std::vector<std::pair<std::string, std::string>> FInsimulUIRegistryModel::Defaul
 	// (see templates/scripts/GenerateInsimulContent.py, which registers the same
 	// key -> WBP mapping into DA_InsimulUIRegistry). The `_C` suffix is the
 	// generated Blueprint class object path a creator loads to CreateWidget<>().
+	//
+	// This map is the FALLBACK, not the authority: an exported game reads the same
+	// key -> widget pairs (plus the module that owns each panel) out of
+	// Content/Data/insimul/ui/panels.json, and ctest `ui_registry` fails if the two
+	// disagree. A plugin dropped into a project that ships no Insimul data dir still
+	// resolves every panel from here — it just cannot module-gate them
+	// (Portable/InsimulUIPanelCatalog.h).
 	return {
-		{"loading_screen", "/Game/UI/WBP_IntroSequence.WBP_IntroSequence_C"},
+		{"loading_screen", "/Game/UI/WBP_LoadingScreen.WBP_LoadingScreen_C"},
 		{"notifications", "/Game/UI/WBP_Notifications.WBP_Notifications_C"},
 		{"hud", "/Game/UI/WBP_HUD.WBP_HUD_C"},
 		{"main_menu", "/Game/UI/WBP_MainMenu.WBP_MainMenu_C"},

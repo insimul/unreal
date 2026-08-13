@@ -903,3 +903,70 @@ resolved rather than required TypeScript runner for re-vendoring. The activation
 semantics themselves (the three answers, the consult order, what an inactive module
 costs) are core's and must be identical across the three engines. Anything else is
 a bug against US-M2.
+
+## US-1 (190) — Module-gated panel surface + the pattern-proof pair (Unreal editor required)
+
+**Automated cores are green before the human pass; the UMG/subsystem seam is
+editor-verified (autoMerge off).**
+
+### 0. Automated pre-checks
+
+- [ ] `cd tools && npm run check:host` — ctest **`ui_registry`** is green (43
+      checks: the shared registry / loading / theme corpora, the shipped panel
+      catalog, the module gate, and six negative controls).
+- [ ] `npm run check:activation` — `no module id or pack area appears in 11
+      activation source(s)`: the panel catalog and its seam are in the scan now, so
+      a hardcoded mechanic name in the UI fails the gate.
+
+### 1. The gate, in a running game
+
+- [ ] Export a game whose World IR declares a genre that owns the panels the
+      catalog gates, play, and confirm the boot log prints
+      `[UI] UI panels: genre '<id>' shows N of M panel(s); withheld: none`.
+- [ ] Export (or `DeclaredGenre`-set) a game whose genre selects none of those
+      modules. The same line names the **withheld** panels, and asking the
+      subsystem for one returns null with a warning that names the key and the
+      module — not a silent no-op, and not an empty panel.
+- [ ] Set a genre id core has never heard of. Every module-owned panel is withheld
+      (the same refusal the pack consult makes), and the activation warning about
+      an unknown genre is present.
+- [ ] Remove `Content/Data/WorldIR.json` so nothing declares a genre. The UI line
+      reads **UNGATED** and every panel resolves — matching the pack consult, which
+      activates everything in that state.
+- [ ] Corrupt `Content/Data/insimul/ui/panels.json`. An **error** naming the file
+      and stating that no panel can be gated; the game still runs on the built-in
+      map. (Delete it instead: the same fallback, at Log rather than Error.)
+
+### 2. Override still wins, and still cannot ungate
+
+- [ ] Add a `Panels` entry to `DA_InsimulUIRegistry` overriding an available key
+      with your own WBP. `UInsimulUIPanelSurface::ResolvePanelClass` returns YOUR
+      class.
+- [ ] Do the same for a key that is currently **withheld**. It stays withheld —
+      swapping a widget says nothing about which modules the bundle selected.
+
+### 3. The pattern-proof pair
+
+- [ ] Confirm the generator created `/Game/UI/WBP_LoadingScreen` (parent
+      `InsimulLoadingScreen`) and `/Game/UI/WBP_Notifications` (parent
+      `InsimulNotificationsWidget`), and that `DA_InsimulUIRegistry` binds
+      `loading_screen` and `notifications` to them. `WBP_IntroSequence` no longer
+      carries the `loading_screen` key — it is the narrative cutscene.
+- [ ] Boot with the loading screen up: the bar rises **monotonically** through the
+      phase labels, the percent text matches the bar, the tip changes per phase,
+      and it reaches 100% at the terminal phase (`OnLoadingComplete` fires once).
+- [ ] Re-entering a phase, or arriving at one out of order, never moves the bar
+      backwards.
+- [ ] Push toasts of each kind. They stack oldest-first, take their colour from
+      `DA_InsimulUITheme` (accent / success / warning / danger), age out after
+      their lifetime, and dismissing one early removes exactly that one. With no
+      toasts, the widget does no per-frame work beyond the queue's tick.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the registry, gate and loading contracts.** The catalog rows and
+the three gating answers are shared; only the concrete widget refs (WBP paths vs
+`.tscn` / prefabs) differ by design. The panel → module ownership table itself is
+engine-side data until core emits a UI surface per module — if the Unity or Godot
+leg gates a panel differently from `ui/panels.json`, that is a bug against this
+story, not a local choice.

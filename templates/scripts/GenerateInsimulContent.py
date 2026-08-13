@@ -59,6 +59,7 @@ import os
 import unreal
 
 MODULE = "InsimulExport"          # generated game module name
+PLUGIN_MODULE = "InsimulRuntime"  # the plugin module the shipped widgets live in
 UI_PACKAGE = "/Game/UI"           # where WBP assets are created
 FONT_PACKAGE = "/Game/Fonts"      # where fonts are imported
 
@@ -90,10 +91,15 @@ def load_widget_class(class_name):
     """Resolve a UMG widget UClass by name.
 
     Tries the C++ game module first (/Script/InsimulExport.<Name>), then the
-    engine UMG module (/Script/UMG.<Name>) for stock panels/leaves, then the
-    `unreal` python stub as a last resort.
+    PLUGIN module (/Script/InsimulRuntime.<Name>) where the shipped default-UI
+    widgets live, then the engine UMG module (/Script/UMG.<Name>) for stock
+    panels/leaves, then the `unreal` python stub as a last resort.
+
+    The plugin package is searched because a spec's parent may be either: the
+    export module owns the game-specific widgets, the plugin owns the ones whose
+    logic is a portable core (the loading screen, the toast stack, the chat panel).
     """
-    for pkg in (MODULE, "UMG", "Slate"):
+    for pkg in (MODULE, PLUGIN_MODULE, "UMG", "Slate"):
         cls = unreal.load_class(None, "/Script/{0}.{1}".format(pkg, class_name))
         if cls:
             return cls
@@ -118,6 +124,7 @@ UMG = {
     "UEditableTextBox": unreal.EditableTextBox,
     "UButton": unreal.Button,
     "UImage": unreal.Image,
+    "UProgressBar": unreal.ProgressBar,
 }
 
 TEXT_TYPES = ("UTextBlock", "UEditableTextBox")
@@ -198,13 +205,38 @@ WIDGET_SPECS = {
         ],
     },
     "WBP_IntroSequence": {
+        # The narrative-beat cutscene, NOT the loading screen: it plays authored
+        # beats, it does not track boot phases. The `loading_screen` panel key moved
+        # to WBP_LoadingScreen when the phase-driven screen landed (tasklist 190
+        # US-1), so a game's boot progress and its intro cutscene are two panels a
+        # creator can replace independently.
         "parent": "InsimulIntroSequence",
-        "panel_key": "loading_screen",
         "children": [
             ("UImage", "PortraitImage"),
             ("UTextBlock", "CharacterNameText"),
             ("UTextBlock", "NarrativeText"),
             ("UTextBlock", "SkipHintText"),
+        ],
+    },
+    "WBP_LoadingScreen": {
+        # The pattern-proof pair, half one: driven by the boot phases through the
+        # portable view-model. Every bound child is BindWidgetOptional, so a creator
+        # may keep the bar and drop the tip.
+        "parent": "InsimulLoadingScreen",
+        "panel_key": "loading_screen",
+        "children": [
+            ("UProgressBar", "LoadingProgressBar"),
+            ("UTextBlock", "PhaseLabelText"),
+            ("UTextBlock", "PercentText"),
+            ("UTextBlock", "TipText"),
+        ],
+    },
+    "WBP_Notifications": {
+        # The pattern-proof pair, half two: the toast stack every system pushes to.
+        "parent": "InsimulNotificationsWidget",
+        "panel_key": "notifications",
+        "children": [
+            ("UVerticalBox", "ToastContainer"),
         ],
     },
     "WBP_Minimap": {

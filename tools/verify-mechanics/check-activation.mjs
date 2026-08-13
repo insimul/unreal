@@ -56,13 +56,21 @@ const SCENARIOS = join(DATA_ROOT, 'scenarios');
 /**
  * The sources that must name no mechanic. The resolver and the pack consult are the
  * two places a list would be tempting; the activator, the binder and the sample scene
- * are where an `if (Genre == TEXT("rpg"))` would land.
+ * are where an `if (Genre == TEXT("rpg"))` would land. The UI panel catalog and its
+ * seam joined the list with tasklist 190 US-1: which panels a module brings is the
+ * newest place a hardcoded list would be tempting, and an `if (Key == "inventory")`
+ * guarded by a mechanic name there would hide a panel in every world with no error
+ * anywhere. The ownership is data (Content/Data/insimul/ui/panels.json); ctest
+ * `ui_registry` checks that data against the table's module ids.
  */
 const NO_HARDCODED_LIST = [
   join('Source', 'InsimulRuntime', 'Portable', 'InsimulModuleActivation.cpp'),
   join('Source', 'InsimulRuntime', 'Portable', 'InsimulModuleActivation.h'),
   join('Source', 'InsimulRuntime', 'Portable', 'InsimulModulePacks.cpp'),
   join('Source', 'InsimulRuntime', 'Portable', 'InsimulModulePacks.h'),
+  join('Source', 'InsimulRuntime', 'Portable', 'InsimulUIPanelCatalog.cpp'),
+  join('Source', 'InsimulRuntime', 'Portable', 'InsimulUIPanelCatalog.h'),
+  join('Source', 'InsimulRuntime', 'Private', 'InsimulUIPanelSurface.cpp'),
   join('templates', 'source', 'mechanics', 'InsimulModuleActivator.cpp'),
   join('templates', 'source', 'mechanics', 'InsimulModuleActivator.h'),
   join('templates', 'source', 'mechanics', 'InsimulMechanicHostBinder.cpp'),

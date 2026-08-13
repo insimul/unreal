@@ -12,6 +12,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Every default-UI panel resolves through the module registry (US-1 of 190).**
+  A panel is now two questions, answered in two layers: which widget serves a key
+  (the registry, with the creator override on top) and whether this world has the
+  panel at all (the module gate). Core's module contract §7.3 says an unselected
+  module contributes no consulted pack and no registered system — its vocabulary is
+  absent from the KB — so a panel over it would render an empty box. The UI answers
+  the same question the KB does.
+  - `Source/InsimulRuntime/Portable/InsimulUIPanelCatalog.{h,cpp}` joins the shipped
+    panel catalog to a resolved module set. The three answers mirror the pack consult
+    exactly: a KNOWN genre shows its modules' panels, an UNKNOWN genre gets none of
+    them, and an UNDECLARED genre is ungated because it activates every pack. An
+    override never ungates a panel, and both refusals are diagnosed
+    (`inactive_module` / `missing_panel`) rather than resolving to nothing quietly.
+  - **The ownership is data.** `Content/Data/insimul/ui/panels.json` carries panel
+    key → widget → owning module, so moving a panel under a different module is an
+    edit to that file and **no engine code change**; the catalog source names no
+    mechanic and is in `check:activation`'s no-hardcoded-list scan (11 sources now).
+    Core emits no UI surface per module, so this one table is this port's own —
+    written up in `docs/ui.md` § Module gating, with ctest pinning every module id in
+    it to one core's activation table names.
+  - **The UE seam** is `UInsimulUIPanelSurface`, a game-instance subsystem the
+    exported game's `UInsimulModuleActivator` hands its resolved set to.
+  - **The pattern-proof pair, end to end.** `UInsimulLoadingScreen`
+    (`WBP_LoadingScreen`, driven by boot PHASES rather than a number, monotonic by
+    the view-model's rule) and `UInsimulNotificationsWidget` (`WBP_Notifications`,
+    repainting when the visible set changes rather than per frame, colouring toasts
+    by theme TOKEN). `WBP_IntroSequence` keeps its narrative role and gives up the
+    `loading_screen` panel key.
+  - **A gate where there was none.** The four UI host tests under
+    `Source/InsimulRuntime/Tests/` named a runner (`run-ui-tests.sh`) that does not
+    exist in this repository, so nothing compiled them and "the registry tests pass
+    on the shared cases" had nothing behind it. `test_ui_registry.cpp` is ctest
+    **`ui_registry`** now — 43 checks over the shared corpus AND the shipped data,
+    with six negative controls. 18 ctest legs with binaries, 13 without. The other
+    three UI tests are still orphaned and named as such in `docs/ui.md`.
+
 - **Modules activated from the genre bundle, not from a hardcoded list (US-3 of 146).**
   An exported game now reads which mechanic modules this world turns on out of the
   table core emits, consults exactly the rule packs they own, and unregisters every

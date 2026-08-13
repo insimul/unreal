@@ -62,8 +62,22 @@ set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/prolog")
 if(NOT EXISTS "${PROLOG_DIR}")
   set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/prolog")
 endif()
+set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/ui")
+if(NOT EXISTS "${UI_DIR}")
+  set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/ui")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
+
+# The default-UI portable slice. Kept apart from PORTABLE_SOURCES so the gates that
+# have nothing to do with UMG do not recompile it.
+set(UI_SOURCES
+    "${RUNTIME_DIR}/Portable/InsimulUIRegistryModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIThemeTokens.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulLoadingViewModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulNotifications.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIPanelCatalog.cpp"
+)
 
 set(INCLUDE_DIRS
     "${RUNTIME_DIR}/Portable"
@@ -240,6 +254,33 @@ target_compile_definitions(insimul_verify_module_activation PRIVATE
 )
 target_compile_options(insimul_verify_module_activation PRIVATE ${WARN_FLAGS})
 add_test(NAME module_activation COMMAND insimul_verify_module_activation)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The default-UI registry, theme, loading view-model and the MODULE GATE
+# (tasklist 190 US-1, docs/ui.md).
+#
+# Until this story the four UI host tests under Source/InsimulRuntime/Tests were
+# compiled and run by NOTHING: the harness they name (run-ui-tests.sh) does not
+# exist in this repository, so "the registry tests pass on the shared cases" was a
+# claim with no gate behind it. This target is that gate. It reads the SAME two
+# files a build ships — the vendored corpus every engine leg runs, and the panel
+# catalog an exported game carries in Content/Data/insimul/ui — so a re-vendored
+# corpus or a re-pointed panel that nothing here would notice cannot exist.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_registry
+    "${RUNTIME_DIR}/Tests/test_ui_registry.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulModuleActivation.cpp"
+    ${UI_SOURCES}
+)
+target_include_directories(insimul_verify_ui_registry PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_registry PRIVATE
+    INSIMUL_UI_DIR="${UI_DIR}"
+    INSIMUL_ACTIVATION_DATA_DIR="${ACTIVATION_DATA_DIR}"
+)
+target_compile_options(insimul_verify_ui_registry PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_registry COMMAND insimul_verify_ui_registry)
 
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it

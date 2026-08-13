@@ -18,7 +18,9 @@ builds it in a real editor — `autoMerge` is off).
 | Concern | UE-free core (host-tested) | UE seam (syntax-gated) |
 | --- | --- | --- |
 | Panel registry | `Portable/InsimulUIRegistryModel.{h,cpp}` | `UInsimulUIRegistry` (`Public/InsimulUIRegistry.h`) |
-| Loading screen | `Portable/InsimulLoadingViewModel.{h,cpp}` | the loading `UUserWidget` (`InsimulIntroSequence`) |
+| Module gate | `Portable/InsimulUIPanelCatalog.{h,cpp}` | `UInsimulUIPanelSurface` (`Public/InsimulUIPanelSurface.h`) |
+| Loading screen | `Portable/InsimulLoadingViewModel.{h,cpp}` | `UInsimulLoadingScreen` (`Public/InsimulLoadingScreen.h`) |
+| Notifications | `Portable/InsimulNotifications.{h,cpp}` | `UInsimulNotificationsWidget` (`Public/InsimulNotificationsWidget.h`) |
 | Theme tokens | `Portable/InsimulUIThemeTokens.{h,cpp}` | `UInsimulUITheme` (`Public/InsimulUITheme.h`) |
 
 ## Panel registry — `InsimulUIRegistryModel` / `UInsimulUIRegistry`
@@ -91,14 +93,78 @@ from a token in the JSON is a parity bug — keep them in lockstep.
 | `radius.{sm,md,lg}`           | 4/8/12     | rounded-box corner radii |
 | `font_size.{caption,body,title,display}` | 12/16/22/32 | text-block font sizes |
 
+## Module gating — every panel resolves through the module registry
+
+A panel is not only "which widget serves this key"; it is also "does this world have
+this panel at all". Core's module contract §7.3 states the cost of a genre bundle not
+selecting a module: **no consulted rule pack and no registered system** — the
+module's vocabulary is absent from the KB entirely. A panel over those predicates
+would render an empty box, so the UI has to answer the same question the KB does.
+
+- **The ownership is data.** `Content/Data/insimul/ui/panels.json` (shipped from
+  `templates/project/…`) carries one row per panel: the key, the widget, and the
+  module that owns it. An empty `module` is a panel every world has. Moving a panel
+  under a different module — or adding one — is an edit to that file, not to engine
+  code: `Portable/InsimulUIPanelCatalog.{h,cpp}` names no mechanic, and
+  `tools/verify-mechanics/check-activation.mjs` fails if one ever appears there.
+- **The three answers mirror the pack consult exactly.** A KNOWN genre shows its
+  modules' panels; an UNKNOWN genre gets no module-owned panel (the same refusal the
+  consult makes); an UNDECLARED genre is ungated, because that is the state an editor
+  session or a commandlet is in — and it activates every pack, so it must withhold no
+  panel either. `UInsimulUIPanelSurface::DescribeSurface()` says which happened.
+- **An override never ungates a panel.** Swapping the widget for a key says nothing
+  about which modules the bundle selected; the registry (widget) and the catalog
+  (existence) are separate questions.
+- **Nothing is a silent no-op.** A withheld panel resolves to nothing WITH an
+  `inactive_module` diagnostic; an unknown key with a `missing_panel` one.
+
+Who applies the set: the exported game's `UInsimulModuleActivator`, once it has
+resolved a genre, hands it to `UInsimulUIPanelSurface::ApplyModuleSet()`.
+
+**The finding behind the data file.** Core emits the genre → module table, and a
+module row carries its pack, its IR section, its decision layers and its host
+interfaces — but no UI surface. There is no field saying which panels a module
+brings, so this ownership table cannot be vendored from core the way the activation
+table is; it is this port's own data. The day core emits one, `Parse()` reads it and
+the local table goes away. Until then ctest `ui_registry` pins every module id in the
+catalog to one the activation table names, so a typo cannot hide a panel in every
+world with no error anywhere.
+
+## The pattern-proof pair — loading screen + notifications
+
+The two smallest panels in the suite, built end to end, so the shape every other
+panel follows is demonstrated rather than described: a stable panel key resolved
+through `UInsimulUIPanelSurface`, a WBP the export generator creates, a UE-free core
+host-tested against the shared corpus, and design tokens read from the theme asset.
+
+- **`UInsimulLoadingScreen`** (panel key `loading_screen`, `WBP_LoadingScreen`) is
+  driven by PHASES, never by a number: the boot loop calls `AdvancePhase(key)` and
+  the view-model turns the ordered weighted table into a monotonic fraction, a label
+  and a deterministic tip. Every bound widget is `BindWidgetOptional`. (The narrative
+  `WBP_IntroSequence` is a cutscene and no longer carries this key — a game's boot
+  progress and its intro are two panels a creator replaces independently.)
+- **`UInsimulNotificationsWidget`** (panel key `notifications`, `WBP_Notifications`)
+  is the toast stack every system pushes to. It repaints when the queue reports the
+  VISIBLE set changed, not per frame, and maps a kind to a theme TOKEN name rather
+  than a color, so a re-skin moves every toast with the rest of the UI.
+
 ## Tests
 
-`npm run engines:unreal:ui` (`tools/verify-unreal/run-ui-tests.sh`) grep-guards
-the cores as UE-free, then compiles + runs `test_ui_registry.cpp` against the
-shared corpus: the registry cases (default / override precedence / missing
-diagnostics + the real WBP default map), the loading cases (weighted progress,
-monotonicity, labels, completion, tips), and the theme-token table. The gate is
-also wired into `npm run engines:check` under the Unreal block.
+`npm run check:host` from `tools/` runs ctest **`ui_registry`**: `test_ui_registry.cpp`
+against the shared corpus and the shipped data — the registry cases (default /
+override precedence / missing diagnostics + the real WBP default map), the loading
+cases (weighted progress, monotonicity, labels, completion, tips), the theme-token
+table, the panel catalog (covers every corpus key, agrees with the built-in fallback
+map, names only modules the activation table knows) and the module gate (per-genre
+withholding, override-cannot-ungate, the diagnostics), plus six negative controls.
+
+Before tasklist 190 US-1 this section named `tools/verify-unreal/run-ui-tests.sh` and
+`npm run engines:unreal:ui`. Neither exists in this repository: the four UI host
+tests under `Source/InsimulRuntime/Tests/` were compiled and run by nothing, so "the
+registry tests pass on the shared cases" was a claim with no gate behind it. The
+registry/loading/theme/gate leg is a ctest target now; `test_quest_journal.cpp`,
+`test_trade.cpp` and `test_dialogue_ui.cpp` are still orphaned and are US-2/US-3's
+to wire.
 
 ## Quest panels + notifications (US-XU2)
 
