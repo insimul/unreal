@@ -1,14 +1,26 @@
 { "name": "insimul-unreal-tooling", "private": true, "type": "module",
   "comment": [
-    "`check` is the toolchain-free gate — a structural scan plus the corpus",
-    "manifest. `check:host` compiles the PORTABLE slice of the runtime module",
-    "and runs it against the golden fixtures; it needs only cmake and a C++17",
+    "`check` is the toolchain-free gate — a structural scan, the corpus manifest,",
+    "and the band-120 mechanic host manifest (every host interface core's module",
+    "manifest names is mirrored, member for member, and implemented or stubbed with",
+    "a stated consequence). `check:host` compiles the PORTABLE slice of the runtime",
+    "module and runs it against the golden fixtures; it needs only cmake and a C++17",
     "compiler (no Unreal, no UBT), so the merge gate runs it too. It drops the",
     "libinsimulcore legs with a configure-time WARNING when no native build is",
-    "beside it — read that warning rather than the pass count."
+    "beside it — read that warning rather than the pass count.",
+    "`check:host:binaries` is the same suite with -DINSIMUL_REQUIRE_BINARIES=ON, so",
+    "that warning becomes a hard failure: it is this harness's --require-binaries,",
+    "and it is what proves an adoption claim rather than assuming one. It adds the",
+    "three bridge-linked legs — radiant_bridge, quest_parity_core and (146 US-1)",
+    "mechanic_bridge, which asks the shipped libinsimulcore `core.methods` and pins",
+    "the answer so a mechanic row ARRIVING fails as loudly as one disappearing.",
+    "`check:full` is check + check:host:binaries."
   ],
-  "scripts": { "check": "node verify-unreal/check.mjs && node vendor-conformance.mjs --check",
+  "scripts": { "check": "node verify-unreal/check.mjs && node vendor-conformance.mjs --check && node verify-mechanics/check-mechanics.mjs",
                "check:corpus": "node vendor-conformance.mjs --check",
+               "check:mechanics": "node verify-mechanics/check-mechanics.mjs",
                "check:host": "cmake -S verify-unreal -B verify-unreal/build && cmake --build verify-unreal/build && ctest --test-dir verify-unreal/build --output-on-failure",
-               "check:full": "npm run check && npm run check:host",
-               "vendor:conformance": "node vendor-conformance.mjs" } }
+               "check:host:binaries": "cmake -S verify-unreal -B verify-unreal/build -DINSIMUL_REQUIRE_BINARIES=ON && cmake --build verify-unreal/build && ctest --test-dir verify-unreal/build --output-on-failure",
+               "check:full": "npm run check && npm run check:host:binaries",
+               "vendor:conformance": "node vendor-conformance.mjs",
+               "vendor:mechanics": "node verify-mechanics/check-mechanics.mjs --write" } }

@@ -367,6 +367,62 @@
       "placeholders": []
     },
     {
+      "path": "source/mechanics/InsimulActorRegistry.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulActorRegistry.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulCombatHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulCombatHost.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulGeometryProbes.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulGeometryProbes.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulLocomotionHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulLocomotionHost.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicHostBinder.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulMechanicHostBinder.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSkillModifierSink.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSkillModifierSink.h",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSurvivalHost.cpp",
+      "placeholders": []
+    },
+    {
+      "path": "source/mechanics/InsimulSurvivalHost.h",
+      "placeholders": []
+    },
+    {
       "path": "source/services/InsimulAIBundle.h",
       "placeholders": []
     },

@@ -162,3 +162,12 @@ FString UInsimulRadiantSourceShell::GetLastError() const
 {
 	return ToFString(Adapter->LastError());
 }
+
+insimul::ICoreCaller* UInsimulRadiantSourceShell::GetCoreCaller() const
+{
+	// Bridge is constructed unconditionally (its no-library form answers
+	// IsAvailable() == false), so this is non-null in every build. Handing out the
+	// seam rather than a second runtime is the point: QuickJS is a few milliseconds
+	// and a heap to start, and two of them would be two core commits in one process.
+	return Bridge.Get();
+}

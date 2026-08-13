@@ -119,6 +119,13 @@ void USurvivalSystem::LoadFromIR(const FString& JsonString)
 
 void USurvivalSystem::Update(float DeltaTime)
 {
+    // A disabled clock decays nothing and fires nothing (US-1 of tasklist 146).
+    // Values and modifiers are kept, so re-enabling resumes rather than restarts.
+    if (!bEnabled)
+    {
+        return;
+    }
+
     // Tick down modifier durations and remove expired ones
     for (int32 i = ActiveModifiers.Num() - 1; i >= 0; --i)
     {
@@ -292,6 +299,69 @@ float USurvivalSystem::GetDecayMultiplier(const FString& NeedId) const
         }
     }
     return Multiplier;
+}
+
+// ── The queries core's ISurvivalSystem asks (US-1 of tasklist 146) ──────────
+// Ordinary accessors over state Update() already computes. IsNeedCritical repeats
+// Update()'s both-extremes rule for temperature deliberately: two spellings of one
+// threshold is exactly the drift these were added to avoid, so if that rule changes
+// it must change in both places and the compiler will not say so — the comment is
+// the only guard, and it is here rather than nowhere.
+
+bool USurvivalSystem::HasNeed(const FString& NeedId) const
+{
+    return Needs.Contains(NeedId);
+}
+
+void USurvivalSystem::GetNeedIds(TArray<FString>& OutIds) const
+{
+    OutIds.Reset();
+    for (const auto& Pair : Needs)
+    {
+        OutIds.Add(Pair.Key);
+    }
+    OutIds.Sort();
+}
+
+float USurvivalSystem::GetNeedMax(const FString& NeedId) const
+{
+    const FNeedRuntime* Need = Needs.Find(NeedId);
+    return Need ? Need->Config.MaxValue : 0.f;
+}
+
+float USurvivalSystem::GetNeedDecayRate(const FString& NeedId) const
+{
+    const FNeedRuntime* Need = Needs.Find(NeedId);
+    return Need ? Need->Config.DecayRate : 0.f;
+}
+
+bool USurvivalSystem::IsNeedCritical(const FString& NeedId) const
+{
+    const FNeedRuntime* Need = Needs.Find(NeedId);
+    if (!Need) return false;
+    const FInsimulNeedConfig& Cfg = Need->Config;
+    if (NeedId == TEXT("temperature") && TemperatureConfig.bCriticalAtBothExtremes)
+    {
+        return Need->Current <= Cfg.CriticalThreshold || Need->Current >= (Cfg.MaxValue - Cfg.CriticalThreshold);
+    }
+    return Need->Current <= Cfg.CriticalThreshold;
+}
+
+bool USurvivalSystem::IsNeedWarning(const FString& NeedId) const
+{
+    const FNeedRuntime* Need = Needs.Find(NeedId);
+    if (!Need) return false;
+    return !IsNeedCritical(NeedId) && Need->Current <= Need->Config.WarningThreshold;
+}
+
+void USurvivalSystem::SetEnabled(bool bInEnabled)
+{
+    bEnabled = bInEnabled;
+}
+
+bool USurvivalSystem::IsEnabled() const
+{
+    return bEnabled;
 }
 
 void USurvivalSystem::FireEvent(EInsimulSurvivalEventType EventType, const FString& NeedId, float Value, const FString& Message)

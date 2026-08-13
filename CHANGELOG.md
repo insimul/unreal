@@ -12,6 +12,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The band-120 mechanic host half — eight interfaces, implemented (US-1 of 146).**
+  Core's seven mechanic modules in band 120–125 name eight distinct host interfaces
+  (`ICombatSystem`, `ISurvivalSystem`, `ICombatStatSink`, `ITrajectoryProbe`,
+  `IPerceptionProbe`, `ITraversalProbe`, `ILocomotionHost`, `ISkillModifierSink`).
+  All eight now have an Unreal implementation and **none is stubbed**.
+  - `Source/InsimulRuntime/Portable/InsimulMechanicContracts.h` is the std-only
+    mirror of the interfaces and their payloads; `InsimulMechanicHosts.{h,cpp}` holds
+    the fallback core documents for every empty slot (absent or unanswering probe
+    reads as clear / no reading / passable / arrived) implemented **once**, plus
+    `ConsequenceOf()` — what leaving each hook empty costs, as data a report prints
+    rather than a comment.
+  - `templates/source/mechanics/` is the engine half: an actor/location registry,
+    a combat roster (`ICombatSystem` + `ICombatStatSink`), three geometry probes over
+    `LineTraceSingleByChannel` and `UNavigationSystemV1`, a locomotion host over
+    `AAIController::MoveToLocation`, a skill-modifier sink, a survival host over the
+    template's own `USurvivalSystem`, and `UInsimulMechanicHostBinder` — the one
+    reflected surface a creator wires.
+  - **Measured, not assumed: no mechanic is reachable in any build that ships
+    today.** `insimul::FInsimulMechanicSurface` asks the library `core.methods` and
+    reports per module; the shipped `libinsimulcore` answers with five methods and no
+    mechanic row, so every module is `BridgeHasNoRow` and the host half is implemented
+    and **inert**. The boot log says exactly that rather than letting a combat host
+    imply combat is wired. `RUNTIME_CORE_ADOPTION.md` §12 is the write-up, including
+    the three findings that must be answered before the rows can be written at all.
+- **`check:mechanics` — the mirror's drift guard (US-1 of 146).**
+  `tools/verify-mechanics/check-mechanics.mjs`, now part of `npm run check`, pins
+  every band-120 module and every interface member against
+  `MODULE_HOSTS.json` (core's commit plus the sha256 of the three files it was derived
+  from), and requires each interface to be implemented or listed in `stubbed` with a
+  stated consequence. `--core <packages/core>` re-derives it all from core's
+  TypeScript; four negative controls prove each check can fail. A port of Unity's
+  script of the same name — one mechanism across the engine repos.
+- **`ctest mechanic_hosts` / `mechanic_bridge` (US-1 of 146).** The portable half is
+  EXECUTED: 106 checks over the mirror, the fallbacks and all four surface states with
+  no engine and no native library, and 120 with the real `libinsimulcore` — the
+  bridge leg pins the whole method list, so a mechanic row **arriving** fails as
+  loudly as one disappearing.
+- **`npm run check:host:binaries` — this harness's `--require-binaries`.**
+  `-DINSIMUL_REQUIRE_BINARIES=ON` turns the configure-time "no libinsimulcore found"
+  warning into a hard failure. `check:full` is now `check` + that. `check:host` stays
+  permissive so a standalone clone still runs the toolchain-free gates.
+
+### Changed
+- `USurvivalSystem` gained `HasNeed`, `GetNeedIds`, `GetNeedMax`, `GetNeedDecayRate`,
+  `IsNeedCritical`, `IsNeedWarning`, `SetEnabled`/`IsEnabled` and a `bEnabled` gate on
+  `Update` — `getNeed`, `getAllNeeds`, `setEnabled` and `isEnabled` are members of the
+  interface core's `stamina` module declares and none of them had a reader here.
+  A disabled clock keeps its values, so re-enabling resumes rather than restarts.
+- `UInsimulRadiantSourceShell` exposes a non-reflected `GetCoreCaller()`, so another
+  adopted slice shares the **one** libinsimulcore runtime instead of starting a second
+  QuickJS. `Source/InsimulRuntime/Portable/` is now on the module's public include
+  path: the mechanic contracts are a boundary the exported game implements, and that
+  cannot be a private header.
+
 - **Quest-parity diff — `quest_parity` / `quest_parity_core` (US-3 of 99).** Two
   new `tools/verify-unreal` ctest targets that run the shared quest corpus
   (`conformance/quests/{hydration,radiant}-cases.json`, 4 + 3 cases) through

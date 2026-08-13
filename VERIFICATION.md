@@ -734,3 +734,85 @@ Godot `chat_model.gd` / `pause_menu_model.gd` / `save_slot_model.gd` and the sha
 corpora case-for-case; only the UMG widget layer differs by design. Any streaming /
 gating / slot-rendering divergence found in the human pass is a bug — file it against
 US-XU4.
+
+---
+
+## US-M1 — band-120 mechanic hosts (Unreal editor required)
+
+Tasklist 146 US-1. The eight host interfaces core's band-120 mechanic modules
+declare now have Unreal implementations in `templates/source/mechanics/`. **Nothing
+here can be executed by a gate in this repo** — no UBT, no engine headers — so the
+whole of the engine half is a human pass. `RUNTIME_CORE_ADOPTION.md` §12 is the
+write-up; read §12.1 first, because the expected outcome of the boot log below is
+"every mechanic is inert", and that is a pass, not a failure.
+
+### 0e. Automated pre-checks (run before the human pass)
+
+```sh
+cd tools
+npm run check                 # includes the mechanic host manifest + 4 negative controls
+npm run check:host:binaries   # --require-binaries: adds mechanic_bridge (the measurement)
+```
+
+- [ ] `check:mechanics` prints 7 modules, 8 host interfaces, 33 members, and names an
+      implementing file for **every** interface (no `STUBBED:` line).
+- [ ] `ctest mechanic_hosts` passes (106 checks) and `mechanic_bridge` passes (120),
+      the latter printing the libinsimulcore version stamp it measured.
+
+### 1. Boot log — the honest report
+
+- [ ] Open an exported game with `UInsimulMechanicHostBinder` present and play. The
+      log carries one `[Insimul]` line per band-120 module. In any build shipping today
+      each is a **Warning** reading `<module>: this build's core bridge carries no
+      <module> rows … The host half is implemented and inert.` That is the correct
+      output — see §12.1. A `Log`-level "reachable and wired" line means a mechanic row
+      has landed in `native/corebridge/js/entry.js`, and §12 needs revisiting.
+- [ ] No module line is missing, and none reads "unavailable" with no remedy.
+
+### 2. The registry and the probes
+
+- [ ] `RegisterActor("nessa", <NPC>)` then `RegisterLocation("forge_gate", …)`. Call a
+      trajectory query through `Hosts()`: with clear line of sight the reading is
+      `clear`, with a wall between the two it is not, and `blockedBy` names the actor
+      the trace hit.
+- [ ] Stand the NPC in shadow and in sunlight: the perception reading's `light` moves
+      between the ambient floor and 100. It is an approximation (§12.4) — check it
+      *moves*, not that it matches a lightmap.
+- [ ] Unregister the NPC's atom, then query again: the probe reports **no reading**,
+      and the caller sees core's documented fallback rather than a blocked line.
+
+### 3. Locomotion
+
+- [ ] Order a movement to a registered location atom for a pawn with an
+      `AAIController`: the pawn walks there and the report is `arrived: true` at the
+      moment of the call, not at the moment of arrival (§12.2 finding 3).
+- [ ] Order one for a pawn with no controller, and one to an unregistered atom: both
+      report `arrived: false` with a reason naming what was missing. Neither crashes.
+- [ ] Order the same movement at `urgency: "urgent"` and `"idle"`: `MaxWalkSpeed`
+      differs. The atom never leaves core as a speed.
+
+### 4. Combat and survival
+
+- [ ] `RegisterCombatEntity` a target, then apply a damage number through the host:
+      health drops by **exactly** that number. No crit, no block, no dodge is applied
+      here — if the number changes, an adapter is rolling its own damage (§12.4).
+- [ ] Call `ExecuteAttack`: it refuses and warns once. This is deliberate.
+- [ ] In a survival world, spend stamina through the host: the HUD meter moves once,
+      not twice, and the needs clock is not double-ticked. `SetEnabled(false)` stops
+      decay and keeps values; re-enabling resumes rather than restarts.
+
+### 5. Skill modifiers
+
+- [ ] Apply `{ move_speed: 20 }` for a registered character: `MaxWalkSpeed` rises.
+      Apply the **same** set again: it does not rise a second time (core requires
+      idempotence).
+- [ ] Apply `{ carry_capacity: 10 }`: nothing changes and the log warns once that the
+      parameter reached nothing. That is the documented gap, not a bug (§12.4).
+
+### Deltas vs Unity/Godot
+
+**Expected: the four in §12.5**, and no others. `false` in place of a caught
+exception, `AddModifier` landing without a preset, plain C++ implementations behind
+one reflected binder, and the portable half being executed by a gate here. Anything
+else — a different fallback, a re-priced action, a re-rolled damage number — is a
+bug against US-M1.

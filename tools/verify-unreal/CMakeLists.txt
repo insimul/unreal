@@ -29,6 +29,8 @@ set(PORTABLE_SOURCES
     "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
     "${RUNTIME_DIR}/Portable/InsimulContentLibrary.cpp"
     "${RUNTIME_DIR}/Portable/InsimulBootstrap.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulMechanicHosts.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulMechanicSurface.cpp"
 )
 
 # Golden fixtures shipped by packages/core (semantics authority).
@@ -61,6 +63,15 @@ if (MSVC)
 else()
     set(WARN_FLAGS -Wall -Wextra)
 endif()
+
+# --require-binaries, in this harness's terms. The bridge-linked targets below are
+# registered only when a libinsimulcore + libinsimul pair is found, and their absence
+# is a configure-time WARNING so a clone with no insimul-native beside it still runs
+# the toolchain-free gates. A warning that reads as a pass is how this repo once
+# believed it had gates it did not have (RUNTIME_CORE_ADOPTION.md §6.4), so
+# -DINSIMUL_REQUIRE_BINARIES=ON turns that warning into a hard configure failure. CI
+# and anyone verifying an adoption claim should pass it.
+option(INSIMUL_REQUIRE_BINARIES "Fail configuration when no libinsimulcore is found" OFF)
 
 enable_testing()
 
@@ -175,6 +186,27 @@ target_compile_options(insimul_verify_radiant_source PRIVATE ${WARN_FLAGS})
 add_test(NAME radiant_source COMMAND insimul_verify_radiant_source --source stub)
 add_test(NAME radiant_source_none COMMAND insimul_verify_radiant_source --source none)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# The band-120 mechanic host half (tasklist 146 US-1, RUNTIME_CORE_ADOPTION.md §12).
+#
+#   mechanic_hosts   always built. Drives the eight-interface mirror, the fallbacks
+#                    core documents per interface, and the module surface's four
+#                    states over stub callers — with no native library present.
+#   mechanic_bridge  built ONLY with libinsimulcore (below). Asks `core.methods` of
+#                    the artifact that ships and pins the answer, so a mechanic row
+#                    ARRIVING fails as loudly as one disappearing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+set(MECHANIC_SOURCES
+    test_mechanic_hosts.cpp
+    ${PORTABLE_SOURCES}
+)
+
+add_executable(insimul_verify_mechanic_hosts ${MECHANIC_SOURCES})
+target_include_directories(insimul_verify_mechanic_hosts PRIVATE ${INCLUDE_DIRS})
+target_compile_options(insimul_verify_mechanic_hosts PRIVATE ${WARN_FLAGS})
+add_test(NAME mechanic_hosts COMMAND insimul_verify_mechanic_hosts)
+
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it
 # somewhere explicit with either:
@@ -256,6 +288,24 @@ if(CORE_LIB)
   target_compile_options(insimul_verify_quest_parity_core PRIVATE ${WARN_FLAGS})
   target_link_libraries(insimul_verify_quest_parity_core PRIVATE "${CORE_LIB}" "${INSIMUL_LIB}")
   add_test(NAME quest_parity_core COMMAND insimul_verify_quest_parity_core --core)
+
+  # ── the band-120 reachability MEASUREMENT (146 US-1) ──────────────────────
+  add_executable(insimul_verify_mechanic_bridge
+      ${MECHANIC_SOURCES}
+      "${RUNTIME_DIR}/Private/Core/InsimulCoreBridge.cpp"
+  )
+  target_include_directories(insimul_verify_mechanic_bridge PRIVATE
+      ${INCLUDE_DIRS}
+      "${RUNTIME_DIR}/Private/Core"
+      "${CORE_ABI_INCLUDE}"
+  )
+  target_compile_definitions(insimul_verify_mechanic_bridge PRIVATE
+      INSIMUL_HAVE_CORE_BRIDGE=1
+      INSIMUL_WITH_CORE=1
+  )
+  target_compile_options(insimul_verify_mechanic_bridge PRIVATE ${WARN_FLAGS})
+  target_link_libraries(insimul_verify_mechanic_bridge PRIVATE "${CORE_LIB}" "${INSIMUL_LIB}")
+  add_test(NAME mechanic_bridge COMMAND insimul_verify_mechanic_bridge --bridge)
 else()
   # NOT a silent skip. The bridge is the whole point of the adoption, so its
   # absence is reported at configure time with the exact fix — but it is a
@@ -263,8 +313,13 @@ else()
   # must still configure and run its six pre-existing gates in a clone that has
   # no insimul-native beside it. radiant_source (the stub leg) still runs and
   # still gates the translation site.
-  message(WARNING
-      "radiant_bridge + quest_parity_core NOT built: no libinsimulcore.a + libinsimul.a found.\n"
+  if(INSIMUL_REQUIRE_BINARIES)
+    set(_missing_binaries_level FATAL_ERROR)
+  else()
+    set(_missing_binaries_level WARNING)
+  endif()
+  message(${_missing_binaries_level}
+      "radiant_bridge + quest_parity_core + mechanic_bridge NOT built: no libinsimulcore.a + libinsimul.a found.\n"
       "  The full-stack radiant gate (11 corpus vectors through core's real\n"
       "  TypeScript) and the three-leg quest parity diff will NOT run. The stub\n"
       "  leg (radiant_source) and the two-leg quest_parity still do.\n"

@@ -1,5 +1,6 @@
 // Copyright 2024 Insimul. All Rights Reserved.
 
+using System.IO;
 using UnrealBuildTool;
 
 public class InsimulRuntime : ModuleRules
@@ -7,6 +8,14 @@ public class InsimulRuntime : ModuleRules
     public InsimulRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+        // Portable/ is the std-only, host-tested semantic layer. It is PUBLIC because
+        // the band-120 mechanic contracts live there (US-1 of tasklist 146):
+        // Portable/InsimulMechanicContracts.h declares the eight host interfaces core's
+        // mechanic modules call, and the game an export pipeline produces is what
+        // IMPLEMENTS them (templates/source/mechanics/). A boundary the exported game
+        // has to implement cannot be a private header.
+        PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "Portable"));
 
         PublicDependencyModuleNames.AddRange(new string[]
         {
