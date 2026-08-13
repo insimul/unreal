@@ -10,7 +10,7 @@
 //
 // All turn SEMANTICS (reject-while-streaming, error bubbles drop from history, the
 // full-text override, the history projection) live in the portable core and are
-// host-tested by run-dialogue-ui-tests.sh. This class is the thin, syntax-gated
+// host-tested by ctest `ui_chat` / `ui_chat_history`. This class is the thin, syntax-gated
 // Blueprint / UObject boundary (pimpl — the std-based model never appears in the
 // reflected layout).
 
@@ -21,7 +21,7 @@
 #include "InsimulChatPanel.generated.h"
 
 // The engine-agnostic model this seam wraps (pimpl). Host-tested by
-// run-dialogue-ui-tests.sh.
+// ctest `ui_chat` / `ui_chat_history`.
 namespace insimul { class FInsimulChatModel; }
 
 /** One rendered chat bubble as the panel draws it. */

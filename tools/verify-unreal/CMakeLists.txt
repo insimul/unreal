@@ -62,8 +62,30 @@ set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/prolog")
 if(NOT EXISTS "${PROLOG_DIR}")
   set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/prolog")
 endif()
+set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/ui")
+if(NOT EXISTS "${UI_DIR}")
+  set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/ui")
+endif()
+set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/items")
+if(NOT EXISTS "${ITEMS_DIR}")
+  set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/items")
+endif()
+set(SKILLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/skills")
+if(NOT EXISTS "${SKILLS_DIR}")
+  set(SKILLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/skills")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
+
+# The default-UI portable slice. Kept apart from PORTABLE_SOURCES so the gates that
+# have nothing to do with UMG do not recompile it.
+set(UI_SOURCES
+    "${RUNTIME_DIR}/Portable/InsimulUIRegistryModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIThemeTokens.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulLoadingViewModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulNotifications.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIPanelCatalog.cpp"
+)
 
 set(INCLUDE_DIRS
     "${RUNTIME_DIR}/Portable"
@@ -240,6 +262,169 @@ target_compile_definitions(insimul_verify_module_activation PRIVATE
 )
 target_compile_options(insimul_verify_module_activation PRIVATE ${WARN_FLAGS})
 add_test(NAME module_activation COMMAND insimul_verify_module_activation)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The default-UI registry, theme, loading view-model and the MODULE GATE
+# (tasklist 190 US-1, docs/ui.md).
+#
+# Until this story the four UI host tests under Source/InsimulRuntime/Tests were
+# compiled and run by NOTHING: the harness they name (run-ui-tests.sh) does not
+# exist in this repository, so "the registry tests pass on the shared cases" was a
+# claim with no gate behind it. This target is that gate. It reads the SAME two
+# files a build ships — the vendored corpus every engine leg runs, and the panel
+# catalog an exported game carries in Content/Data/insimul/ui — so a re-vendored
+# corpus or a re-pointed panel that nothing here would notice cannot exist.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_registry
+    "${RUNTIME_DIR}/Tests/test_ui_registry.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulModuleActivation.cpp"
+    ${UI_SOURCES}
+)
+target_include_directories(insimul_verify_ui_registry PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_registry PRIVATE
+    INSIMUL_UI_DIR="${UI_DIR}"
+    INSIMUL_ACTIVATION_DATA_DIR="${ACTIVATION_DATA_DIR}"
+)
+target_compile_options(insimul_verify_ui_registry PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_registry COMMAND insimul_verify_ui_registry)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The quest + trade panels (tasklist 190 US-2, docs/ui.md).
+#
+# These two sources existed before this story and were compiled by NOTHING — the
+# runners they name (run-quest-ui-tests.sh, run-trade-ui-tests.sh) belong to the
+# parent platform checkout and do not exist here, so "the shared view-model cases
+# pass" was a claim with no gate behind it, exactly as ui_registry was. Both read
+# the vendored corpus every engine leg runs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_quest_journal
+    "${RUNTIME_DIR}/Tests/test_quest_journal.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulNotifications.cpp"
+)
+target_include_directories(insimul_verify_ui_quest_journal PRIVATE ${INCLUDE_DIRS})
+target_compile_options(insimul_verify_ui_quest_journal PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_quest_journal COMMAND insimul_verify_ui_quest_journal "${UI_DIR}")
+
+add_executable(insimul_verify_ui_trade
+    "${RUNTIME_DIR}/Tests/test_trade.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+)
+target_include_directories(insimul_verify_ui_trade PRIVATE ${INCLUDE_DIRS})
+target_compile_options(insimul_verify_ui_trade PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_trade COMMAND insimul_verify_ui_trade "${UI_DIR}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shop + REPUTATION, EQUIPMENT, and the state-location invariant (190 US-2).
+#
+# The first two read the band-124 items corpora — a price is a function of the
+# simulation rather than a shop table, and the world declares its own equipment
+# slots — and diff the canonical projection of every case byte for byte. The third
+# loads a REAL SaveFile fixture, runs the panels' ops through it, and asserts the
+# change is in the save's canonical bytes, that a re-hydrate reproduces it, that
+# everything outside currentState is untouched, and that the census is conserved:
+# playthrough data lives in the save file and nowhere else.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_state_binding
+    "${RUNTIME_DIR}/Tests/test_ui_state_binding.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradePricing.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulEquipmentModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIStateBinding.cpp"
+)
+target_include_directories(insimul_verify_ui_state_binding PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_state_binding PRIVATE
+    INSIMUL_ITEMS_DIR="${ITEMS_DIR}"
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+)
+target_compile_options(insimul_verify_ui_state_binding PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_state_binding COMMAND insimul_verify_ui_state_binding)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The SKILL panel (190 US-2). A skill tree is a value core returns rather than a
+# callback it invokes (module contract §3), so the four engine legs share the
+# view-model in conformance/skills/trees.json and differ only in how they paint
+# it. This leg drives all six cases through FInsimulSkillTreeModel and diffs the
+# canonical projection byte for byte, plus the `funded` and `depths` read-outs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_skill_tree
+    "${RUNTIME_DIR}/Tests/test_skill_tree.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSkillTreeModel.cpp"
+)
+target_include_directories(insimul_verify_ui_skill_tree PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_skill_tree PRIVATE
+    INSIMUL_SKILLS_DIR="${SKILLS_DIR}"
+)
+target_compile_options(insimul_verify_ui_skill_tree PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_skill_tree COMMAND insimul_verify_ui_skill_tree)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dialogue + pause/main menu + save/load (tasklist 190 US-3, docs/ui.md).
+#
+# test_dialogue_ui.cpp existed before this story and, like the quest/trade tests
+# before US-2, was compiled by NOTHING: it named run-dialogue-ui-tests.sh, a runner
+# that lives in the parent platform checkout and does not exist here. So the chat /
+# pause-menu / save-slot cores were three claims with no gate behind them. One
+# binary, four legs (`--only <area>`), so a failure names the AREA rather than "the
+# dialogue tests":
+#
+#   ui_chat          the streaming turn lifecycle, the triggered actions the panel
+#                    asserts into the KB, and the history projection.
+#   ui_pause_menu    module-bundle tab gating (AND) + the open/active-tab reducer.
+#   ui_save_slots    slot rendering incl. the corrupted-envelope MESSAGING every
+#                    default-UI leg must share, and the main menu's Continue gate
+#                    (which slot resumes, and why it may not).
+#   ui_chat_history  where that history LANDS: flushed into a real save envelope's
+#                    `conversations`, read back, with everything else — currentState
+#                    above all — byte-identical.
+#
+# The last leg links the save + state-binding stack for that reason; the first
+# three would run without it, and are not split off because one source file with
+# one corpus reader is cheaper to keep honest than two.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_dialogue
+    "${RUNTIME_DIR}/Tests/test_dialogue_ui.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulChatModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulPauseMenuModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSlotModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradePricing.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulEquipmentModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIStateBinding.cpp"
+)
+target_include_directories(insimul_verify_ui_dialogue PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_dialogue PRIVATE
+    INSIMUL_UI_DIR="${UI_DIR}"
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+)
+target_compile_options(insimul_verify_ui_dialogue PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_chat COMMAND insimul_verify_ui_dialogue --only chat)
+add_test(NAME ui_pause_menu COMMAND insimul_verify_ui_dialogue --only pause)
+add_test(NAME ui_save_slots COMMAND insimul_verify_ui_dialogue --only save)
+add_test(NAME ui_chat_history COMMAND insimul_verify_ui_dialogue --only history)
 
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it

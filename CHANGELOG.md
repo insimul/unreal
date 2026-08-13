@@ -12,6 +12,144 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dialogue + pause/main menu + save/load, module-bundle gated (US-3 of 190).**
+  The last third of the default-UI suite: the chat panel on the streaming
+  conversation SDK, the unified ESC menu, the main menu and the save/load slot
+  screen — all three screens generated as WBPs and resolved through the module
+  registry, so a creator swaps any of them without touching engine code.
+  - **The screens.** `UInsimulMainMenuPanel` (`main_menu`), `UInsimulPauseMenuPanel`
+    (`pause_menu`) and `UInsimulSaveLoadPanel` (`save_load`), each a thin
+    syntax-gated UMG boundary over a core host-tested UE-free. The main menu's
+    Continue is a MEASUREMENT, not a flag: it is the save codec's own outcomes
+    projected by `FInsimulSaveSlotModel`, so a tampered save is refused with the
+    shared message instead of offered, and the slot it resumes is the most recently
+    saved LOADABLE one by the codec's ISO-8601 `savedAt`. That decision lives in
+    the PORTABLE model (`ContinueSlot()` / `ContinueBlockedReason()`), where
+    `ui_save_slots` can gate it — the newest stamp wins, an unstamped save loses to
+    a stamped one, a tie falls to the lower index, the listing order changes
+    nothing, and corrupting the winner hands Continue to the runner-up. The ESC
+    shell applies two
+    gates, both data — the module bundle's tab gate and the mechanic module's panel
+    gate — and a tab whose panel is withheld is DROPPED and named rather than left
+    to open an empty box. The slot screen renders a corrupted envelope as a row
+    that refuses Load and still offers Save, because hiding it would tell a player
+    their save vanished.
+  - **The dialogue history lands in `save.conversations`.**
+    `FInsimulUIStateBinding::HydrateConversation` / `ApplyConversation` are the one
+    seam for it, writing the row in place — every other field of it, every other
+    row, and `currentState` above all, stay byte-identical (a new
+    `CanonicalOutsideConversations` instrument proves it). Conversations are the
+    documented exception to "the panels read `currentState`": the save schema has
+    carried them as their own top-level array since v1, and inventing
+    `currentState.dialogue` in one port is exactly the divergence the state
+    invariant exists to stop.
+  - **The gate that was missing.** `test_dialogue_ui.cpp` named
+    `run-dialogue-ui-tests.sh`, a runner that lives in the parent platform checkout
+    and does not exist here, so for two bands NOTHING compiled the chat, pause-menu
+    and save-slot cases. It is four ctest legs now — `ui_chat`, `ui_pause_menu`,
+    `ui_save_slots`, `ui_chat_history` — over one binary selected by `--only`, so a
+    failure names the area: 63 assertions of which 13 are negative controls. Every
+    header that pointed at the phantom runner now names the leg that runs it.
+  - `npm run check:panels` reports **21 of 22** catalog rows generated: `main_menu`,
+    `pause_menu` and `save_load` moved out of PENDING into `WIDGET_SPECS`, leaving
+    only `quest_journal` (the export module's own widget, which declares no
+    BindWidget children).
+  - Docs: `docs/ui.md` § the screens + tests, and a `VERIFICATION.md` § US-3 (190)
+    human checklist for the full loop — streaming a turn, killing the network
+    mid-stream, a genre that withholds a tab, and a byte-flipped save that must not
+    be continuable.
+- **The play panels, backed only by `save.currentState` (US-2 of 190).** Quest
+  journal / tracker / offer, inventory / containers / equipment, shop + reputation,
+  the skill tree, the HUD and its map / quick-bar / wheel sub-panels, the notice
+  board and the document reader. Every one resolves through the module registry, and
+  every one that shows playthrough data reads it out of the save file and nowhere
+  else.
+  - **One store.** `Portable/InsimulUIStateBinding.{h,cpp}` is the single place a
+    panel's slice is hydrated out of a real `SaveFile` and applied back into
+    `currentState` — trade (`player.gold` / `player.inventory` /
+    `containers.containers` / `npcs.merchantStates`), quests (`quests.progress` /
+    `quests.dynamicQuests`, with the TITLE coming from the quest system's Prolog
+    content rather than the snapshot's `name`), the market a shop prices in (the
+    merchant's markup joined to the player's standing in `currentState.reputation`)
+    and the item ledger the equipment panel reads. There is deliberately no
+    equipment WRITE path: wearing a thing is the items module's decision layer, and
+    inventing a `currentState.player.equipped` schema in one engine port is how four
+    legs stop agreeing about what a save contains.
+  - **The skill panel is a VALUE core returns, not a callback it invokes** (module
+    contract §3). `Portable/InsimulSkillTreeModel.{h,cpp}` is core's
+    `skills/skill-view.ts` in C++: rows derived from the authored parent EDGES rather
+    than a `tier` field, prices off the world's own curve, labels falling back to
+    ids, an OPEN effect-kind set, and the refusal ladder in core's own order
+    (`unknown → owned → points → requires → forbidden`). The two rungs only a KB can
+    answer — an unmet authored goal and a prohibition — are handed in, never guessed.
+  - **The HUD holds no list of what a HUD contains.** `UInsimulHUDPanel`'s slots are
+    catalog keys it asks `UInsimulUIPanelSurface` about, so a world without the map
+    module has no minimap and the HUD SAYS SO (`WithheldSubPanels()` / `Describe()`)
+    instead of quietly missing one. The maps project host-supplied pins totally (a
+    zero range / degenerate rect centres rather than dividing) and fast travel is a
+    request broadcast to the host, never a teleport a panel performs. No discovery or
+    read/unread state is invented: the save envelope declares no map or document
+    slice, so those flags are the host's and no panel writes one back.
+  - **Gates.** ctest **`ui_skill_tree`** drives all six cases of
+    `conformance/skills/trees.json` — the view-model the Babylon reference and the
+    Unity/Godot ports run — and diffs the canonical projection byte for byte plus the
+    `funded` and `depths` read-outs: 39 checks, 18 of them negative controls. ctest
+    **`ui_state_binding`** covers the pricing + equipping corpora and the
+    state-location invariant. 22 ctest legs with binaries (was 18).
+  - **`npm run check:panels`** is new, and it closes a gap `ui_registry` structurally
+    cannot see: a catalog row can name a WBP that nothing generates, so the key
+    resolves "available" and then renders an asset path that does not exist. The gate
+    pins every catalog row to a `GenerateInsimulContent.py` spec bound to that key,
+    refuses a spec that claims a key the catalog lacks or names a parent class this
+    repo does not ship, and prints the rows nothing serves yet as PENDING with the
+    story that owes them (`main_menu`, `pause_menu`, `save_load` — US-3's — and
+    `quest_journal`). Five negative controls.
+  - **The export generator now builds the whole US-2 set.** `WBP_SkillTree`,
+    `WBP_WorldMap`, `WBP_HUD`, `WBP_Inventory`, `WBP_Container`, `WBP_ShopPanel`,
+    `WBP_EquipmentPanel`, `WBP_RadialMenu` and `WBP_NoticeBoard` are generated and
+    registered under their panel keys, and `WBP_Minimap` / `WBP_ActionQuickBar` /
+    `WBP_DocumentReader` were repointed from the export module's pre-registry
+    prototypes to the plugin's panels (and given the panel keys they never carried).
+    The prototypes in `templates/source/ui/` are untouched and unreferenced by the
+    catalog; the plugin's classes carry `…Panel` suffixes because a UObject class
+    name is global.
+
+- **Every default-UI panel resolves through the module registry (US-1 of 190).**
+  A panel is now two questions, answered in two layers: which widget serves a key
+  (the registry, with the creator override on top) and whether this world has the
+  panel at all (the module gate). Core's module contract §7.3 says an unselected
+  module contributes no consulted pack and no registered system — its vocabulary is
+  absent from the KB — so a panel over it would render an empty box. The UI answers
+  the same question the KB does.
+  - `Source/InsimulRuntime/Portable/InsimulUIPanelCatalog.{h,cpp}` joins the shipped
+    panel catalog to a resolved module set. The three answers mirror the pack consult
+    exactly: a KNOWN genre shows its modules' panels, an UNKNOWN genre gets none of
+    them, and an UNDECLARED genre is ungated because it activates every pack. An
+    override never ungates a panel, and both refusals are diagnosed
+    (`inactive_module` / `missing_panel`) rather than resolving to nothing quietly.
+  - **The ownership is data.** `Content/Data/insimul/ui/panels.json` carries panel
+    key → widget → owning module, so moving a panel under a different module is an
+    edit to that file and **no engine code change**; the catalog source names no
+    mechanic and is in `check:activation`'s no-hardcoded-list scan (11 sources now).
+    Core emits no UI surface per module, so this one table is this port's own —
+    written up in `docs/ui.md` § Module gating, with ctest pinning every module id in
+    it to one core's activation table names.
+  - **The UE seam** is `UInsimulUIPanelSurface`, a game-instance subsystem the
+    exported game's `UInsimulModuleActivator` hands its resolved set to.
+  - **The pattern-proof pair, end to end.** `UInsimulLoadingScreen`
+    (`WBP_LoadingScreen`, driven by boot PHASES rather than a number, monotonic by
+    the view-model's rule) and `UInsimulNotificationsWidget` (`WBP_Notifications`,
+    repainting when the visible set changes rather than per frame, colouring toasts
+    by theme TOKEN). `WBP_IntroSequence` keeps its narrative role and gives up the
+    `loading_screen` panel key.
+  - **A gate where there was none.** The four UI host tests under
+    `Source/InsimulRuntime/Tests/` named a runner (`run-ui-tests.sh`) that does not
+    exist in this repository, so nothing compiled them and "the registry tests pass
+    on the shared cases" had nothing behind it. `test_ui_registry.cpp` is ctest
+    **`ui_registry`** now — 43 checks over the shared corpus AND the shipped data,
+    with six negative controls. 18 ctest legs with binaries, 13 without. The other
+    three UI tests are still orphaned and named as such in `docs/ui.md`.
+
 - **Modules activated from the genre bundle, not from a hardcoded list (US-3 of 146).**
   An exported game now reads which mechanic modules this world turns on out of the
   table core emits, consults exactly the rule packs they own, and unregisters every

@@ -1,13 +1,14 @@
-# `Content/Data/insimul/` — the data this game's mechanics run on
+# `Content/Data/insimul/` — the data this game's mechanics and its UI run on
 
-Three vendored things an exported game reads at boot. None of them is hand-written,
-and none of them should be edited here: each is a byte-for-byte mirror of something
-`@insimul/core` emits, and a gate in this plugin fails if one drifts.
+Four things an exported game reads at boot. The first two are byte-for-byte mirrors
+of something `@insimul/core` emits and should not be edited here (a gate in this
+plugin fails if one drifts); the last two are this repository's own.
 
 | Directory | What it is | Re-vendor with |
 | --- | --- | --- |
 | `modules/genre-activation.json` | Genre bundle → active modules, their rule packs, their host interfaces. Core emits it with `npm run module-activation`. | `node tools/vendor-conformance.mjs --core <packages/core>`, then copy it here |
 | `packs/*.pl` + `PACKS.json` | The rule packs themselves — core's own Prolog, with a sha256 and consult order per pack. | `node tools/vendor-packs/vendor-packs.mjs --core <packages/core> --write` |
+| `ui/panels.json` | The default-UI panel catalog: panel key → widget, and the module that OWNS each panel. This one is this port's own — core emits no UI surface per module. | edit it — that is the whole of "move a panel under a different module" |
 | `scenarios/*.json` | The sample scene's script. This one IS this repository's own; it is not mirrored from core. | edit it — `AInsimulMechanicSampleScene` and ctest `activation_witness` both read it |
 
 ## How they are used
@@ -20,8 +21,13 @@ preference: a `:- dynamic` arriving after a clause for the same predicate is a
 `permission_error`.
 
 A module the bundle does not select costs something, and that is the point: its pack
-is never consulted (its vocabulary does not exist in the KB at all) and
-`UInsimulMechanicHostBinder` unregisters every host interface no active module names.
+is never consulted (its vocabulary does not exist in the KB at all),
+`UInsimulMechanicHostBinder` unregisters every host interface no active module names,
+and `UInsimulUIPanelSurface` withholds the panels `ui/panels.json` says that module
+owns — a panel over predicates with no solutions is an empty box, so the UI answers
+the same question the KB does. A genre core has never heard of gets no module-owned
+panel; a game that declares no genre at all is UNGATED, exactly as its pack consult
+is (it activates every pack), and the boot log says which of the two happened.
 
 ## Why the pack text is shipped as data at all
 
@@ -38,5 +44,6 @@ row that should delete this directory.
 cd tools
 npm run check:packs        # the packs hash what PACKS.json records
 npm run check:activation   # the table, the resolution, and no hardcoded module list
+npm run check:host         # ctest ui_registry — the panel catalog and the module gate
 npm run check:host:binaries # ctest activation_witness — the KB witness + the scene
 ```

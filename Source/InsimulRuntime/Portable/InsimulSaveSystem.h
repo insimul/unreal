@@ -112,6 +112,14 @@ public:
 	/** Direct access to the parsed SaveFile tree (for accessors/tests). */
 	const FJsonValue* SaveFile() const { return Root.get(); }
 
+	/**
+	 * Mutable access to the same tree — the ONE store the default-UI panels write
+	 * through (Portable/InsimulUIStateBinding.h). Exposed so a panel op lands in the
+	 * save itself rather than in a copy beside it; the serializer and the integrity
+	 * hash then see the change without anything having to remember to sync.
+	 */
+	FJsonValue* MutableSaveFile() { return Root.get(); }
+
 private:
 	void MigrateToCurrent();
 

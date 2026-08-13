@@ -1,0 +1,133 @@
+{
+  "description": "The default-UI panel catalog an exported game reads: one row per panel key, the widget that serves it, and the Insimul module that OWNS it. A row with an empty module is a panel every world has; a row that names a module is withheld from a world whose genre bundle did not select that module (core's module contract §7.3 — an unselected module contributes no consulted pack and no registered system, so a panel over its predicates would render an empty box). Read by Source/InsimulRuntime/Portable/InsimulUIPanelCatalog.{h,cpp} and by ctest `ui_registry`; nothing in that source names a mechanic, which is why moving a panel under a different module is an edit to THIS file and not an engine code change.",
+  "version": 1,
+  "moduleSource": "conformance/modules/genre-activation.json — every `module` below must be an id that table names. Core emits no UI surface per module (a module row carries its pack, its IR section, its decision layers and its host interfaces, and nothing about panels), so this ownership table is this port's own data rather than a vendored mirror; ctest `ui_registry` pins it to the table's module ids so a typo cannot silently hide a panel forever. See docs/ui.md § Module gating.",
+  "panels": [
+    {
+      "key": "loading_screen",
+      "widget": "/Game/UI/WBP_LoadingScreen.WBP_LoadingScreen_C",
+      "module": "",
+      "notes": "Driven by the boot phases (Portable/InsimulLoadingViewModel.h); every world boots."
+    },
+    {
+      "key": "notifications",
+      "widget": "/Game/UI/WBP_Notifications.WBP_Notifications_C",
+      "module": "",
+      "notes": "The toast queue every system pushes to (Portable/InsimulNotifications.h)."
+    },
+    {
+      "key": "hud",
+      "widget": "/Game/UI/WBP_HUD.WBP_HUD_C",
+      "module": "",
+      "notes": "The HUD frame itself is unconditional; its module-owned sub-panels carry their own keys."
+    },
+    {
+      "key": "main_menu",
+      "widget": "/Game/UI/WBP_MainMenu.WBP_MainMenu_C",
+      "module": ""
+    },
+    {
+      "key": "game_menu",
+      "widget": "/Game/UI/WBP_GameMenu.WBP_GameMenu_C",
+      "module": "",
+      "notes": "The unified menu shell; each TAB is gated by the panel it hosts, not the shell."
+    },
+    {
+      "key": "quest_journal",
+      "widget": "/Game/UI/WBP_QuestJournal.WBP_QuestJournal_C",
+      "module": "",
+      "notes": "Quests are not a mechanic module — every genre bundle carries them."
+    },
+    {
+      "key": "quest_tracker",
+      "widget": "/Game/UI/WBP_QuestTracker.WBP_QuestTracker_C",
+      "module": ""
+    },
+    {
+      "key": "quest_offer",
+      "widget": "/Game/UI/WBP_QuestOfferPanel.WBP_QuestOfferPanel_C",
+      "module": ""
+    },
+    {
+      "key": "inventory",
+      "widget": "/Game/UI/WBP_Inventory.WBP_Inventory_C",
+      "module": "equipment",
+      "notes": "Backed by the item ledger the equipment module owns; without it the world has no items vocabulary."
+    },
+    {
+      "key": "container",
+      "widget": "/Game/UI/WBP_Container.WBP_Container_C",
+      "module": "equipment"
+    },
+    {
+      "key": "merchant",
+      "widget": "/Game/UI/WBP_ShopPanel.WBP_ShopPanel_C",
+      "module": "equipment",
+      "notes": "Pricing and the transaction ledger are the equipment module's decision layers."
+    },
+    {
+      "key": "equipment",
+      "widget": "/Game/UI/WBP_EquipmentPanel.WBP_EquipmentPanel_C",
+      "module": "equipment",
+      "notes": "The worn set, its armour and the carried weight. The slots are the WORLD's (the module's IR section declares them), so without the module there is no slot table to render."
+    },
+    {
+      "key": "skill_tree",
+      "widget": "/Game/UI/WBP_SkillTree.WBP_SkillTree_C",
+      "module": "skill",
+      "notes": "Tiers and unlocks over the skill module's progression layer; a world without it has no proficiency vocabulary for the nodes to read."
+    },
+    {
+      "key": "minimap",
+      "widget": "/Game/UI/WBP_Minimap.WBP_Minimap_C",
+      "module": "map",
+      "notes": "The HUD corner map. The HUD frame itself is unconditional; this sub-panel is not."
+    },
+    {
+      "key": "world_map",
+      "widget": "/Game/UI/WBP_WorldMap.WBP_WorldMap_C",
+      "module": "map",
+      "notes": "The fullscreen map with its markers and fast-travel targets."
+    },
+    {
+      "key": "quickbar",
+      "widget": "/Game/UI/WBP_ActionQuickBar.WBP_ActionQuickBar_C",
+      "module": "",
+      "notes": "Action shortcuts over the shared action vocabulary — every world has actions."
+    },
+    {
+      "key": "radial_menu",
+      "widget": "/Game/UI/WBP_RadialMenu.WBP_RadialMenu_C",
+      "module": "",
+      "notes": "The gamepad wheel over the same entries the quickbar holds."
+    },
+    {
+      "key": "notice_board",
+      "widget": "/Game/UI/WBP_NoticeBoard.WBP_NoticeBoard_C",
+      "module": "",
+      "notes": "Available offers, posted rather than pushed. Quests are not a mechanic module, so every genre bundle carries the board."
+    },
+    {
+      "key": "documents",
+      "widget": "/Game/UI/WBP_DocumentReader.WBP_DocumentReader_C",
+      "module": "",
+      "notes": "Letters, books and notices the player reads; authored content, not a mechanic."
+    },
+    {
+      "key": "dialogue",
+      "widget": "/Game/UI/WBP_Dialogue.WBP_Dialogue_C",
+      "module": "",
+      "notes": "The streaming conversation panel — the plugin's own feature, not a mechanic module."
+    },
+    {
+      "key": "pause_menu",
+      "widget": "/Game/UI/WBP_PauseMenu.WBP_PauseMenu_C",
+      "module": ""
+    },
+    {
+      "key": "save_load",
+      "widget": "/Game/UI/WBP_SaveLoad.WBP_SaveLoad_C",
+      "module": ""
+    }
+  ]
+}

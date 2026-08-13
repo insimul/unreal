@@ -59,6 +59,7 @@ import os
 import unreal
 
 MODULE = "InsimulExport"          # generated game module name
+PLUGIN_MODULE = "InsimulRuntime"  # the plugin module the shipped widgets live in
 UI_PACKAGE = "/Game/UI"           # where WBP assets are created
 FONT_PACKAGE = "/Game/Fonts"      # where fonts are imported
 
@@ -90,10 +91,15 @@ def load_widget_class(class_name):
     """Resolve a UMG widget UClass by name.
 
     Tries the C++ game module first (/Script/InsimulExport.<Name>), then the
-    engine UMG module (/Script/UMG.<Name>) for stock panels/leaves, then the
-    `unreal` python stub as a last resort.
+    PLUGIN module (/Script/InsimulRuntime.<Name>) where the shipped default-UI
+    widgets live, then the engine UMG module (/Script/UMG.<Name>) for stock
+    panels/leaves, then the `unreal` python stub as a last resort.
+
+    The plugin package is searched because a spec's parent may be either: the
+    export module owns the game-specific widgets, the plugin owns the ones whose
+    logic is a portable core (the loading screen, the toast stack, the chat panel).
     """
-    for pkg in (MODULE, "UMG", "Slate"):
+    for pkg in (MODULE, PLUGIN_MODULE, "UMG", "Slate"):
         cls = unreal.load_class(None, "/Script/{0}.{1}".format(pkg, class_name))
         if cls:
             return cls
@@ -118,6 +124,7 @@ UMG = {
     "UEditableTextBox": unreal.EditableTextBox,
     "UButton": unreal.Button,
     "UImage": unreal.Image,
+    "UProgressBar": unreal.ProgressBar,
 }
 
 TEXT_TYPES = ("UTextBlock", "UEditableTextBox")
@@ -165,20 +172,26 @@ WIDGET_SPECS = {
         ],
     },
     "WBP_ActionQuickBar": {
-        "parent": "InsimulActionQuickBar",
+        # The shortcuts bar. It takes the SAME entries the radial wheel holds
+        # (FInsimulRadialEntry), because the two are input surfaces over one set of
+        # shortcuts and a second entry struct would be the drift itself.
+        "parent": "InsimulQuickBar",
+        "panel_key": "quickbar",
         "children": [
-            ("UHorizontalBox", "SlotsContainer"),
+            ("UHorizontalBox", "SlotContainer"),
+            ("UTextBlock", "EmptyBarText"),
         ],
     },
     "WBP_DocumentReader": {
-        "parent": "InsimulDocumentReader",
+        # Letters, books and notices — authored content rather than a mechanic, so
+        # every genre bundle carries it. Page turns are C++ (a character budget over
+        # the source text, which reads the same on four engines).
+        "parent": "InsimulDocumentPanel",
+        "panel_key": "documents",
         "children": [
             ("UTextBlock", "TitleText"),
-            ("UTextBlock", "ContentText"),
+            ("UTextBlock", "BodyText"),
             ("UTextBlock", "PageCounterText"),
-            ("UButton", "PrevPageButton"),
-            ("UButton", "NextPageButton"),
-            ("UButton", "CloseButton"),
         ],
     },
     "WBP_GameMenu": {
@@ -198,8 +211,12 @@ WIDGET_SPECS = {
         ],
     },
     "WBP_IntroSequence": {
+        # The narrative-beat cutscene, NOT the loading screen: it plays authored
+        # beats, it does not track boot phases. The `loading_screen` panel key moved
+        # to WBP_LoadingScreen when the phase-driven screen landed (tasklist 190
+        # US-1), so a game's boot progress and its intro cutscene are two panels a
+        # creator can replace independently.
         "parent": "InsimulIntroSequence",
-        "panel_key": "loading_screen",
         "children": [
             ("UImage", "PortraitImage"),
             ("UTextBlock", "CharacterNameText"),
@@ -207,19 +224,35 @@ WIDGET_SPECS = {
             ("UTextBlock", "SkipHintText"),
         ],
     },
-    "WBP_Minimap": {
-        "parent": "InsimulMinimap",
+    "WBP_LoadingScreen": {
+        # The pattern-proof pair, half one: driven by the boot phases through the
+        # portable view-model. Every bound child is BindWidgetOptional, so a creator
+        # may keep the bar and drop the tip.
+        "parent": "InsimulLoadingScreen",
+        "panel_key": "loading_screen",
         "children": [
-            # Required BindWidget — the widget fails to construct without these.
-            ("UImage", "MinimapImage"),
-            ("UCanvasPanel", "MarkerCanvas"),
-            ("UImage", "PlayerArrow"),
-            ("UOverlay", "CompassOverlay"),
-            # Optional
-            ("UButton", "LegendButton"),
-            ("UButton", "FullscreenButton"),
-            ("UButton", "CollapseButton"),
-            ("UVerticalBox", "LegendPanel"),
+            ("UProgressBar", "LoadingProgressBar"),
+            ("UTextBlock", "PhaseLabelText"),
+            ("UTextBlock", "PercentText"),
+            ("UTextBlock", "TipText"),
+        ],
+    },
+    "WBP_Notifications": {
+        # The pattern-proof pair, half two: the toast stack every system pushes to.
+        "parent": "InsimulNotificationsWidget",
+        "panel_key": "notifications",
+        "children": [
+            ("UVerticalBox", "ToastContainer"),
+        ],
+    },
+    "WBP_Minimap": {
+        # The HUD corner map, owned by the world's map module: a world whose genre
+        # bundle did not select it never resolves this panel at all.
+        "parent": "InsimulMinimapPanel",
+        "panel_key": "minimap",
+        "children": [
+            ("UCanvasPanel", "MarkerContainer"),
+            ("UTextBlock", "PlaceNameText"),
         ],
     },
     "WBP_QuestOfferPanel": {
@@ -240,6 +273,140 @@ WIDGET_SPECS = {
         "children": [
             ("UTextBlock", "TrackerHeaderText"),
             ("UVerticalBox", "ObjectiveListBox"),
+        ],
+    },
+    # ── tasklist 190 US-2: the play panels, each backed by a portable view-model
+    # the host tests drive (ctest ui_state_binding / ui_skill_tree / ui_trade /
+    # ui_quest_journal). Every one of them carries a panel_key, so the registry the
+    # exported game resolves through binds it and a creator can swap it for their
+    # own WBP without touching engine code.
+    "WBP_Inventory": {
+        "parent": "InsimulInventoryPanel",
+        "panel_key": "inventory",
+        "children": [
+            ("UVerticalBox", "ItemListBox"),
+            ("UTextBlock", "GoldText"),
+            ("UTextBlock", "EmptyText"),
+        ],
+    },
+    "WBP_Container": {
+        "parent": "InsimulContainerPanel",
+        "panel_key": "container",
+        "children": [
+            ("UVerticalBox", "ContainerListBox"),
+            ("UTextBlock", "TitleText"),
+            ("UButton", "TakeAllButton"),
+        ],
+    },
+    "WBP_ShopPanel": {
+        # Shop + reputation: the price is a function of the simulation (the
+        # merchant's markup, the shelf, the player's standing with the faction the
+        # shop answers to), never a shop table.
+        "parent": "InsimulMerchantPanel",
+        "panel_key": "merchant",
+        "children": [
+            ("UVerticalBox", "MerchantListBox"),
+            ("UVerticalBox", "PlayerListBox"),
+            ("UTextBlock", "MerchantNameText"),
+            ("UTextBlock", "PlayerGoldText"),
+            ("UTextBlock", "MerchantGoldText"),
+        ],
+    },
+    "WBP_EquipmentPanel": {
+        "parent": "InsimulEquipmentPanel",
+        "panel_key": "equipment",
+        "children": [
+            ("UVerticalBox", "SlotListBox"),
+            ("UTextBlock", "ArmorText"),
+            ("UTextBlock", "WeightText"),
+            ("UTextBlock", "EncumberedText"),
+        ],
+    },
+    "WBP_SkillTree": {
+        # Tiers and unlocks over the skill module's progression layer. Every number
+        # on it — a node's row, its price, the cap, the curve — comes from the
+        # portable view-model, which is core's `skill-view` in C++.
+        "parent": "InsimulSkillPanel",
+        "panel_key": "skill_tree",
+        "children": [
+            ("UVerticalBox", "TreeListBox"),
+            ("UTextBlock", "EmptyPanelText"),
+        ],
+    },
+    "WBP_WorldMap": {
+        "parent": "InsimulWorldMapPanel",
+        "panel_key": "world_map",
+        "children": [
+            ("UCanvasPanel", "MarkerContainer"),
+            ("UTextBlock", "SelectionLabelText"),
+        ],
+    },
+    "WBP_RadialMenu": {
+        "parent": "InsimulRadialMenu",
+        "panel_key": "radial_menu",
+        "children": [
+            ("UVerticalBox", "WedgeContainer"),
+            ("UTextBlock", "SelectionLabelText"),
+        ],
+    },
+    "WBP_NoticeBoard": {
+        "parent": "InsimulNoticeBoard",
+        "panel_key": "notice_board",
+        "children": [
+            ("UVerticalBox", "NoticeListBox"),
+            ("UTextBlock", "EmptyBoardText"),
+        ],
+    },
+    "WBP_HUD": {
+        # The frame itself is unconditional; its slots are catalog keys it asks the
+        # panel surface about, so which of them a world shows is the module data's
+        # answer and not this script's.
+        "parent": "InsimulHUDPanel",
+        "panel_key": "hud",
+        "children": [
+            ("UOverlay", "SlotContainer"),
+            ("UTextBlock", "DiagnosticText"),
+        ],
+    },
+    "WBP_MainMenu": {
+        # The front screen. Continue is not a flag on this asset: the C++ asks the
+        # save codec's own outcomes through the slot model (ctest `ui_save_slots`),
+        # so a tampered save is refused here for the same reason, and with the same
+        # words, as it is on the save/load screen.
+        "parent": "InsimulMainMenuPanel",
+        "panel_key": "main_menu",
+        "children": [
+            ("UTextBlock", "TitleText"),
+            ("UButton", "NewGameButton"),
+            ("UButton", "ContinueButton"),
+            ("UButton", "LoadGameButton"),
+            ("UButton", "SettingsButton"),
+            ("UButton", "QuitButton"),
+            ("UTextBlock", "ContinueHintText"),
+        ],
+    },
+    "WBP_PauseMenu": {
+        # The unified ESC shell. The tab bar and the content box are created EMPTY:
+        # which tabs exist is the module bundle's answer (portable pause-menu model)
+        # crossed with the panel surface's, and the C++ fills both boxes at runtime.
+        "parent": "InsimulPauseMenuPanel",
+        "panel_key": "pause_menu",
+        "children": [
+            ("UHorizontalBox", "TabBar"),
+            ("UVerticalBox", "TabContentBox"),
+            ("UTextBlock", "DiagnosticText"),
+        ],
+    },
+    "WBP_SaveLoad": {
+        # Save/load slots. A corrupted envelope gets a ROW, not a hole: the status,
+        # the message and whether Load is offered are the slot model's, shared with
+        # the other three engines through conformance/ui/save-slot-cases.json.
+        "parent": "InsimulSaveLoadPanel",
+        "panel_key": "save_load",
+        "children": [
+            ("UVerticalBox", "SlotListBox"),
+            ("UTextBlock", "StatusText"),
+            ("UTextBlock", "EmptyListText"),
         ],
     },
 }

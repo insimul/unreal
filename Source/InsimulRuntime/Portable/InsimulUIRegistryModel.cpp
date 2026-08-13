@@ -11,13 +11,22 @@ FInsimulUIRegistryModel::FInsimulUIRegistryModel(
 	: DefaultsList(std::move(Defaults)) {}
 
 std::vector<std::pair<std::string, std::string>> FInsimulUIRegistryModel::DefaultPanelMap() {
-	// Panel keys mirror packages/core/conformance/ui/registry-cases.json ->
-	// panel_keys. Each maps to the WBP the export pipeline creates under /Game/UI
+	// Panel keys COVER packages/core/conformance/ui/registry-cases.json ->
+	// panel_keys and add this suite's module-gated panels (equipment, skill tree,
+	// the two map surfaces, quickbar/radial, notice board, documents — tasklist 190
+	// US-2); the shared corpus pins the floor, not the ceiling. Each maps to the WBP the export pipeline creates under /Game/UI
 	// (see templates/scripts/GenerateInsimulContent.py, which registers the same
 	// key -> WBP mapping into DA_InsimulUIRegistry). The `_C` suffix is the
 	// generated Blueprint class object path a creator loads to CreateWidget<>().
+	//
+	// This map is the FALLBACK, not the authority: an exported game reads the same
+	// key -> widget pairs (plus the module that owns each panel) out of
+	// Content/Data/insimul/ui/panels.json, and ctest `ui_registry` fails if the two
+	// disagree. A plugin dropped into a project that ships no Insimul data dir still
+	// resolves every panel from here — it just cannot module-gate them
+	// (Portable/InsimulUIPanelCatalog.h).
 	return {
-		{"loading_screen", "/Game/UI/WBP_IntroSequence.WBP_IntroSequence_C"},
+		{"loading_screen", "/Game/UI/WBP_LoadingScreen.WBP_LoadingScreen_C"},
 		{"notifications", "/Game/UI/WBP_Notifications.WBP_Notifications_C"},
 		{"hud", "/Game/UI/WBP_HUD.WBP_HUD_C"},
 		{"main_menu", "/Game/UI/WBP_MainMenu.WBP_MainMenu_C"},
@@ -28,6 +37,14 @@ std::vector<std::pair<std::string, std::string>> FInsimulUIRegistryModel::Defaul
 		{"inventory", "/Game/UI/WBP_Inventory.WBP_Inventory_C"},
 		{"container", "/Game/UI/WBP_Container.WBP_Container_C"},
 		{"merchant", "/Game/UI/WBP_ShopPanel.WBP_ShopPanel_C"},
+		{"equipment", "/Game/UI/WBP_EquipmentPanel.WBP_EquipmentPanel_C"},
+		{"skill_tree", "/Game/UI/WBP_SkillTree.WBP_SkillTree_C"},
+		{"minimap", "/Game/UI/WBP_Minimap.WBP_Minimap_C"},
+		{"world_map", "/Game/UI/WBP_WorldMap.WBP_WorldMap_C"},
+		{"quickbar", "/Game/UI/WBP_ActionQuickBar.WBP_ActionQuickBar_C"},
+		{"radial_menu", "/Game/UI/WBP_RadialMenu.WBP_RadialMenu_C"},
+		{"notice_board", "/Game/UI/WBP_NoticeBoard.WBP_NoticeBoard_C"},
+		{"documents", "/Game/UI/WBP_DocumentReader.WBP_DocumentReader_C"},
 		{"dialogue", "/Game/UI/WBP_Dialogue.WBP_Dialogue_C"},
 		{"pause_menu", "/Game/UI/WBP_PauseMenu.WBP_PauseMenu_C"},
 		{"save_load", "/Game/UI/WBP_SaveLoad.WBP_SaveLoad_C"},

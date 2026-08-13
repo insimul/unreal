@@ -112,6 +112,10 @@
       "placeholders": []
     },
     {
+      "path": "project/Content/Data/insimul/ui/panels.json",
+      "placeholders": []
+    },
+    {
       "path": "project/Content/Data/insimul/packs/PACKS.json",
       "placeholders": []
     },

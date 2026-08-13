@@ -13,7 +13,7 @@
 // owns only which tabs are visible and the open/active-tab reducer.
 //
 // std-only (no Unreal Engine, no CoreMinimal.h) so the whole contract runs under
-// tools/verify-unreal/run-dialogue-ui-tests.sh. Every default-UI leg runs the SAME
+// ctest `ui_pause_menu` (190 US-3). Every default-UI leg runs the SAME
 // matrix (packages/core/conformance/ui/pause-menu-cases.json) so the four legs
 // cannot diverge on which tabs a genre bundle unlocks.
 

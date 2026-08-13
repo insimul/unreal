@@ -18,7 +18,9 @@ builds it in a real editor — `autoMerge` is off).
 | Concern | UE-free core (host-tested) | UE seam (syntax-gated) |
 | --- | --- | --- |
 | Panel registry | `Portable/InsimulUIRegistryModel.{h,cpp}` | `UInsimulUIRegistry` (`Public/InsimulUIRegistry.h`) |
-| Loading screen | `Portable/InsimulLoadingViewModel.{h,cpp}` | the loading `UUserWidget` (`InsimulIntroSequence`) |
+| Module gate | `Portable/InsimulUIPanelCatalog.{h,cpp}` | `UInsimulUIPanelSurface` (`Public/InsimulUIPanelSurface.h`) |
+| Loading screen | `Portable/InsimulLoadingViewModel.{h,cpp}` | `UInsimulLoadingScreen` (`Public/InsimulLoadingScreen.h`) |
+| Notifications | `Portable/InsimulNotifications.{h,cpp}` | `UInsimulNotificationsWidget` (`Public/InsimulNotificationsWidget.h`) |
 | Theme tokens | `Portable/InsimulUIThemeTokens.{h,cpp}` | `UInsimulUITheme` (`Public/InsimulUITheme.h`) |
 
 ## Panel registry — `InsimulUIRegistryModel` / `UInsimulUIRegistry`
@@ -91,14 +93,81 @@ from a token in the JSON is a parity bug — keep them in lockstep.
 | `radius.{sm,md,lg}`           | 4/8/12     | rounded-box corner radii |
 | `font_size.{caption,body,title,display}` | 12/16/22/32 | text-block font sizes |
 
+## Module gating — every panel resolves through the module registry
+
+A panel is not only "which widget serves this key"; it is also "does this world have
+this panel at all". Core's module contract §7.3 states the cost of a genre bundle not
+selecting a module: **no consulted rule pack and no registered system** — the
+module's vocabulary is absent from the KB entirely. A panel over those predicates
+would render an empty box, so the UI has to answer the same question the KB does.
+
+- **The ownership is data.** `Content/Data/insimul/ui/panels.json` (shipped from
+  `templates/project/…`) carries one row per panel: the key, the widget, and the
+  module that owns it. An empty `module` is a panel every world has. Moving a panel
+  under a different module — or adding one — is an edit to that file, not to engine
+  code: `Portable/InsimulUIPanelCatalog.{h,cpp}` names no mechanic, and
+  `tools/verify-mechanics/check-activation.mjs` fails if one ever appears there.
+- **The three answers mirror the pack consult exactly.** A KNOWN genre shows its
+  modules' panels; an UNKNOWN genre gets no module-owned panel (the same refusal the
+  consult makes); an UNDECLARED genre is ungated, because that is the state an editor
+  session or a commandlet is in — and it activates every pack, so it must withhold no
+  panel either. `UInsimulUIPanelSurface::DescribeSurface()` says which happened.
+- **An override never ungates a panel.** Swapping the widget for a key says nothing
+  about which modules the bundle selected; the registry (widget) and the catalog
+  (existence) are separate questions.
+- **Nothing is a silent no-op.** A withheld panel resolves to nothing WITH an
+  `inactive_module` diagnostic; an unknown key with a `missing_panel` one.
+
+Who applies the set: the exported game's `UInsimulModuleActivator`, once it has
+resolved a genre, hands it to `UInsimulUIPanelSurface::ApplyModuleSet()`.
+
+**The finding behind the data file.** Core emits the genre → module table, and a
+module row carries its pack, its IR section, its decision layers and its host
+interfaces — but no UI surface. There is no field saying which panels a module
+brings, so this ownership table cannot be vendored from core the way the activation
+table is; it is this port's own data. The day core emits one, `Parse()` reads it and
+the local table goes away. Until then ctest `ui_registry` pins every module id in the
+catalog to one the activation table names, so a typo cannot hide a panel in every
+world with no error anywhere.
+
+## The pattern-proof pair — loading screen + notifications
+
+The two smallest panels in the suite, built end to end, so the shape every other
+panel follows is demonstrated rather than described: a stable panel key resolved
+through `UInsimulUIPanelSurface`, a WBP the export generator creates, a UE-free core
+host-tested against the shared corpus, and design tokens read from the theme asset.
+
+- **`UInsimulLoadingScreen`** (panel key `loading_screen`, `WBP_LoadingScreen`) is
+  driven by PHASES, never by a number: the boot loop calls `AdvancePhase(key)` and
+  the view-model turns the ordered weighted table into a monotonic fraction, a label
+  and a deterministic tip. Every bound widget is `BindWidgetOptional`. (The narrative
+  `WBP_IntroSequence` is a cutscene and no longer carries this key — a game's boot
+  progress and its intro are two panels a creator replaces independently.)
+- **`UInsimulNotificationsWidget`** (panel key `notifications`, `WBP_Notifications`)
+  is the toast stack every system pushes to. It repaints when the queue reports the
+  VISIBLE set changed, not per frame, and maps a kind to a theme TOKEN name rather
+  than a color, so a re-skin moves every toast with the rest of the UI.
+
 ## Tests
 
-`npm run engines:unreal:ui` (`tools/verify-unreal/run-ui-tests.sh`) grep-guards
-the cores as UE-free, then compiles + runs `test_ui_registry.cpp` against the
-shared corpus: the registry cases (default / override precedence / missing
-diagnostics + the real WBP default map), the loading cases (weighted progress,
-monotonicity, labels, completion, tips), and the theme-token table. The gate is
-also wired into `npm run engines:check` under the Unreal block.
+`npm run check:host` from `tools/` runs ctest **`ui_registry`**: `test_ui_registry.cpp`
+against the shared corpus and the shipped data — the registry cases (default /
+override precedence / missing diagnostics + the real WBP default map), the loading
+cases (weighted progress, monotonicity, labels, completion, tips), the theme-token
+table, the panel catalog (covers every corpus key, agrees with the built-in fallback
+map, names only modules the activation table knows) and the module gate (per-genre
+withholding, override-cannot-ungate, the diagnostics), plus six negative controls.
+
+Before tasklist 190 US-1 this section named `tools/verify-unreal/run-ui-tests.sh` and
+`npm run engines:unreal:ui`. Neither exists in this repository: the four UI host
+tests under `Source/InsimulRuntime/Tests/` were compiled and run by nothing, so "the
+registry tests pass on the shared cases" was a claim with no gate behind it. The
+registry/loading/theme/gate leg is a ctest target now. US-2 wired the rest of its
+half: `test_quest_journal.cpp` is ctest `ui_quest_journal`, `test_trade.cpp` is
+`ui_trade`, `test_ui_state_binding.cpp` is `ui_state_binding` and
+`test_skill_tree.cpp` is `ui_skill_tree`. US-3 wired the last one:
+`test_dialogue_ui.cpp` is ctest `ui_chat` / `ui_pause_menu` / `ui_save_slots` /
+`ui_chat_history`. No UI host test is orphaned now.
 
 ## Quest panels + notifications (US-XU2)
 
@@ -177,7 +246,105 @@ the live currentState arrays, two models never share, every op conserves the ite
 gold census, a detached model fails safely). Wired into `npm run engines:check`
 under the Unreal block.
 
-## Dialogue panel + pause/main menu + save/load (US-XU4)
+## The play panels — one store, one view-model each (tasklist 190 US-2)
+
+Every panel below is backed EXCLUSIVELY by `save.currentState` (platform/CLAUDE.md):
+`Portable/InsimulUIStateBinding.{h,cpp}` is the one place a panel's slice is read out
+of a real `SaveFile` and written back into it, and ctest `ui_state_binding` asserts
+after every op that the change is in the save's canonical bytes, that a re-hydrate
+reproduces it, that everything OUTSIDE `currentState` is byte-identical, and that the
+item + gold census is conserved.
+
+| panel key | widget | owning module | view-model |
+| --- | --- | --- | --- |
+| `inventory` / `container` / `merchant` | `UInsimulInventoryPanel` / `UInsimulContainerPanel` / `UInsimulMerchantPanel` | equipment | `InsimulTradeModel` + `InsimulTradePricing` |
+| `equipment` | `UInsimulEquipmentPanel` | equipment | `InsimulEquipmentModel` |
+| `skill_tree` | `UInsimulSkillPanel` | skill | `InsimulSkillTreeModel` |
+| `minimap` / `world_map` | `UInsimulMinimapPanel` / `UInsimulWorldMapPanel` | map | — (host-supplied pins) |
+| `quickbar` / `radial_menu` | `UInsimulQuickBar` / `UInsimulRadialMenu` | — | — (host-supplied entries) |
+| `notice_board` | `UInsimulNoticeBoard` | — | `InsimulQuestJournalModel` |
+| `documents` | `UInsimulDocumentPanel` | — | — (authored content) |
+| `hud` | `UInsimulHUDPanel` | — | the panel surface itself |
+
+### Skill tree — `InsimulSkillTreeModel` → `UInsimulSkillPanel`
+
+A skill panel is **a value core returns, not a callback it invokes** (module contract
+§3 forbids a UI hook on the C ABI), so what the four engine legs share is the
+view-model and what differs is how each of them paints it.
+`Portable/InsimulSkillTreeModel.{h,cpp}` is core's `skills/skill-view.ts` in C++: for
+each authored tree it derives the header (level, cap, banked XP, the next level's
+price off the world's own curve, the pool and what the taken nodes have spent) and,
+per node, the row it sits on (from the authored PARENT EDGES, never a `tier` field),
+its cost, its requirements with parents desugared into one gate, whether it is taken
+or available, and the refusal when it is not — in core's `SKILL_UNLOCK_REFUSALS`
+order `unknown → owned → points → requires → forbidden`.
+
+Two of those rungs are **handed in, never computed**: `unmet` (authored goals the
+rules layer did not satisfy) and `forbidden` (what `permissible/3` refused) are the
+KB's answers, and a pure function that guessed one would be inventing it. A caller
+with no KB passes neither and gets nodes that read `conditional` — "core has nothing
+against this, and something core cannot evaluate might".
+
+Nothing in the file knows a node: labels fall back to ids, the effect kind set is
+OPEN (`sings(the_masons_round)` rides through untouched), and every derived list is
+sorted by id while authored order is preserved.
+
+### HUD, maps, quick bar, documents
+
+- **`UInsimulHUDPanel`** holds no list of what a HUD contains. Its slots are catalog
+  KEYS, and it asks `UInsimulUIPanelSurface` which of them this world may show; a
+  withheld slot lands in `WithheldSubPanels()` and in `Describe()`, never silently
+  missing. This is the one place the gate becomes visible to a player.
+- **`UInsimulMinimapPanel` / `UInsimulWorldMapPanel`** project host-supplied pins —
+  the corner map around the player within a range, the fullscreen map over a world
+  rect. Both projections are total (a zero range / degenerate rect centres rather
+  than dividing). Fast travel is a REQUEST broadcast to the host: whether a world
+  lets an actor cross it is the simulation's answer, not a panel's.
+- **No discovery or read/unread state is invented.** The save envelope declares no
+  map or document slice (see `conformance/saves`), so those flags are the host's and
+  the panels never write one back — the same restraint the equipment model shows
+  about equipping. Inventing a `currentState.map` schema in one engine port is
+  exactly how four legs stop agreeing about what a save contains.
+- **`UInsimulQuickBar`** takes the SAME `FInsimulRadialEntry` the wheel does, because
+  the two are input surfaces over one set of shortcuts; a second entry struct would
+  be the drift itself. A disabled entry is shown and greyed, never hidden.
+- **`UInsimulDocumentPanel`** paginates by a character budget over the source text
+  rather than by rendered layout, so a page break is the same on four engines and two
+  resolutions.
+
+### Tests
+
+- ctest **`ui_skill_tree`** (`test_skill_tree.cpp`) drives all six cases of
+  `conformance/skills/trees.json` and diffs the canonical projection byte for byte,
+  plus the `funded` (`skill_tree/2` read backwards) and `depths` read-outs — 39
+  checks including 18 negative controls: funding the pool moves a `points` refusal,
+  dropping the KB's answers moves `requires` and `forbidden`, an unmet goal outranks
+  a prohibition, an authored parent edge moves a node's row, a cyclic tree
+  terminates, and a level past the end of the curve repeats its last price instead of
+  becoming free.
+- ctest **`ui_state_binding`** covers the shop + reputation corpus, the equipping
+  corpus and the state-location invariant.
+- `npm run check:panels` closes the gap between the catalog and the widgets an
+  exported game actually builds: every catalog row names a WBP that
+  `GenerateInsimulContent.py` generates AND binds to that key, no spec claims a key
+  the catalog lacks, and every spec's parent is a `UUserWidget` this repository
+  ships. Rows nothing serves yet print as PENDING with the story that owes them (as
+  of US-2: `main_menu`, `pause_menu`, `save_load` — US-3's — and `quest_journal`,
+  whose export-module widget declares no bound children). Five negative controls.
+
+### A note on the export module's prototypes
+
+`templates/source/ui/` still carries the pre-registry prototypes
+(`UInsimulSkillTreePanel` with its hardcoded five tiers, `UInsimulMinimap`,
+`UInsimulWorldMap`, `UInsimulDocumentReader`, `UInsimulActionQuickBar`,
+`UInsimulHUD`). They are no longer what the panel catalog resolves — the WBP specs
+now name the plugin's panels — and the plugin's classes are named apart from them
+(`…Panel` suffixes) because a UObject class name is global and two `UInsimulMinimap`s
+in one project do not link. Deleting the prototypes is a separate change from
+landing their replacements.
+
+
+## Dialogue panel + pause/main menu + save/load (US-XU4, screens in 190 US-3)
 
 The last three default-UI cores mirror the shared corpora case-for-case (Babylon /
 Unity / Godot / Unreal); all decision logic is UE-free and host-tested, with a thin
@@ -221,14 +388,81 @@ its MESSAGE is the cross-engine contract — e.g. an integrity mismatch on a tam
 save always reads "Save file integrity check failed — file may be corrupted or
 tampered." `HasAnyLoadable()` gates the main-menu Continue button. Shared cases:
 `save-slot-cases.json`. The `UInsimulSaveSlotPanel` seam feeds the rows to the
-save/load screen.
+save/load screen. `ContinueSlot()` / `ContinueBlockedReason()` (190 US-3) answer
+the main menu: the most recently saved LOADABLE slot by the codec's ISO-8601
+`savedAt` — never a corrupted one, however recent — or none, with the reason.
+
+### The screens (tasklist 190 US-3)
+
+The three cores above are decision layers; US-3 added the UMG screens that show
+them, each generated as a WBP by `GenerateInsimulContent.py` and bound to its
+catalog panel key, so a creator swaps any of them through the registry without
+touching engine code.
+
+`UInsimulMainMenuPanel` (`main_menu`) — title, New Game, Continue, Load, Settings,
+Quit. **Continue is a measurement, not a flag**: whether the player may continue is
+`FInsimulSaveSlotModel`'s answer over the codec's outcomes — the same core the
+save/load screen uses — so a tampered save is refused with the shared message
+rather than offered. `ContinueSlot()` is the most recently saved LOADABLE slot,
+ordered by the codec's ISO-8601 `savedAt` and never by a local clock. Every entry
+is a delegate: loading a level, writing a save and quitting belong to the game
+mode, because a panel that called `UGameplayStatics` itself could not be swapped.
+
+`UInsimulPauseMenuPanel` (`pause_menu`) — the unified ESC shell. Two gates, both
+data: the TAB gate is the module bundle applied by `FInsimulPauseMenuModel`, the
+PANEL gate is the mechanic module owning the panel a tab hosts, answered by
+`UInsimulUIPanelSurface`. A tab shows only when BOTH say yes, and a tab whose panel
+is withheld is dropped rather than left to open an empty box — `WithheldTabs()` and
+`Describe()` name every such drop, so a missing Skills tab is diagnosable without a
+debugger. Pausing, input capture and transitions stay with the owning widget.
+
+`UInsimulSaveLoadPanel` (`save_load`) — the slot screen the ESC menu hosts and the
+main menu opens. It renders outcomes and judges none of them: a corrupted slot gets
+a ROW (status, message, Load refused, Save still offered), because hiding it would
+tell a player their save vanished, and overwriting is the recovery they need.
 
 ### Tests
 
-`npm run engines:unreal:dialogue-ui`
-(`tools/verify-unreal/run-dialogue-ui-tests.sh`) grep-guards all three cores as
-UE-free, then compiles + runs `test_dialogue_ui.cpp` (24 assertions): the full
-`chat-cases.json` streaming/action/history matrix, the `pause-menu-cases.json`
-tab-gating + open/active reducer, the `save-slot-cases.json` row rendering incl. the
-corrupted-envelope messaging, plus a handful of edge-behaviour unit assertions.
-Wired into `npm run engines:check` under the Unreal block.
+`npm run check:host` from `tools/` runs `test_dialogue_ui.cpp` as FOUR ctest legs
+over one binary (`--only <area>`), so a failure names the area rather than "the
+dialogue tests":
+
+| leg | what it pins |
+| --- | --- |
+| `ui_chat` | the streaming turn lifecycle, the KB actions a stream triggers, the transcript and the history projection (`chat-cases.json`) |
+| `ui_pause_menu` | module-bundle tab gating (AND) + the open/active-tab reducer (`pause-menu-cases.json`) |
+| `ui_save_slots` | slot rendering incl. the corrupted-envelope MESSAGING contract (`save-slot-cases.json`), and the main menu's Continue gate |
+| `ui_chat_history` | where the history LANDS: flushed into a real save envelope's `conversations` (`conformance/saves/v2-typical.json`), read back, with everything else — `currentState` above all — byte-identical |
+
+63 assertions, of which 13 are negative controls: an unexpected NPC line, a dropped
+chunk, an unauthored tab, enabling the withheld modules, an unexpected slot,
+calling a corrupted envelope healthy, a newer save that must move Continue, a
+corrupted winner that must hand Continue to the runner-up, a never-flushed
+conversation, a changed character, an instrument that must move when
+`currentState` does, a non-array `conversations` and a flush with no character id
+each redden the corresponding comparison.
+
+**Continue is in the core, not in the menu widget.** Which slot the main menu
+resumes is a decision (`FInsimulSaveSlotModel::ContinueSlot()`), so it sits where a
+host gate can reach it rather than in `UInsimulMainMenuPanel`, which no gate here
+compiles. The shared corpus pins the ROWS and `expected_has_loadable`, not the
+ordering — core's own main menu is playthrough-based — so `ui_save_slots` DERIVES
+its expectation per case (the answer must be a `can_load` row, never a corrupted
+one, and the `savedAt`-maximal loadable row) and then states the ordering rule
+directly: the newest ISO-8601 stamp wins, an unstamped save loses to a stamped one,
+an equal stamp falls to the lower index, and the listing order the caller used
+changes nothing.
+
+Before US-3 this section named `npm run engines:unreal:dialogue-ui` and
+`tools/verify-unreal/run-dialogue-ui-tests.sh`. Neither exists in this repository —
+that script belongs to the parent platform checkout — so for two bands nothing
+compiled these cases and "the dialogue tests pass" was a claim with no gate behind
+it. It is the same failure US-1 found in the registry tests, and it is why the
+runner a header names is now checked against the runner that exists.
+
+`npm run check:panels` closes the other half for the three screens: each of
+`main_menu`, `pause_menu` and `save_load` is a catalog row whose WBP
+`GenerateInsimulContent.py` actually generates, bound to that key, with bound child
+names matching the `BindWidgetOptional` properties. The UMG behaviour itself
+(clicking Continue on a corrupted-only save directory, a withheld tab disappearing)
+is the human checklist in `VERIFICATION.md` § 190 US-3 — there is no UBT here.

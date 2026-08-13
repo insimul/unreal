@@ -17,7 +17,10 @@
 // here — the packs it owns are never consulted (its vocabulary does not exist in the
 // KB at all, which ctest `activation_witness` proves against a real libinsimul), and
 // UInsimulMechanicHostBinder asks this subsystem for the active host interfaces and
-// UNREGISTERS every host outside them.
+// UNREGISTERS every host outside them. The third consequence is what the PLAYER sees:
+// the resolved set is handed to UInsimulUIPanelSurface, which withholds the default-UI
+// panels an inactive module owns rather than showing a panel over predicates that have
+// no solutions (tasklist 190 US-1).
 //
 // WHERE THE PACK TEXT COMES FROM. Vendored, as data the game ships, because no C ABI
 // row returns one — see Portable/InsimulModulePacks.h and §14.1. A `prolog.packs` row
@@ -133,6 +136,12 @@ public:
     static FString DataRoot();
 
 private:
+    /** Hand the resolved set to the plugin's UI panel surface, so the default-UI
+     *  panels a module owns are withheld from a world that did not select it (core
+     *  §7.3's "no registered system", on the UI side). The asymmetry an undeclared
+     *  genre gets is the resolver's, not this file's. */
+    void ApplyToPanelSurface();
+
     /** Read PACKS.json and genre-activation.json. False (and logged) when either is
      *  missing — a game whose activation data is absent must not boot pretending it
      *  activated something. */

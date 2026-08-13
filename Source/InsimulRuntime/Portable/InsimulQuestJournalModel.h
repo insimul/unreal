@@ -120,6 +120,14 @@ public:
 	std::vector<std::string> FilteredIds() const;
 	FQuestCounts Counts() const;
 
+	/**
+	 * Quests with a given status, in stable insertion order, WITHOUT touching the
+	 * current filter. The notice board reads the available set while the journal is
+	 * open on another tab, and a read that moved the tab would make two open panels
+	 * fight over one piece of interaction state.
+	 */
+	std::vector<FQuestEntry> WithStatus(const std::string& Status) const;
+
 	// Tracker HUD -------------------------------------------------------------
 
 	/** Track an ACTIVE quest. Fails if not active, already tracked, or full. */

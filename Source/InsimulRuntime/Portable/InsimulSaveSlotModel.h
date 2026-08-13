@@ -15,7 +15,7 @@
 // save surfaces the SAME message on every default-UI leg.
 //
 // std-only (no Unreal Engine, no CoreMinimal.h) so the whole contract runs under
-// tools/verify-unreal/run-dialogue-ui-tests.sh. Shared cases:
+// ctest `ui_save_slots` (190 US-3). Shared cases:
 // packages/core/conformance/ui/save-slot-cases.json.
 
 #pragma once
@@ -68,6 +68,33 @@ public:
 
 	/** True when any slot is loadable (main-menu Continue gate). */
 	bool HasAnyLoadable() const;
+
+	/**
+	 * The slot the main menu's Continue resumes: the most recently saved LOADABLE
+	 * one, or -1 when there is none. A corrupted envelope is never it, however
+	 * recent it looks — loadability is this model's answer and not the caller's,
+	 * which is the whole reason Continue lives here rather than in a menu widget
+	 * keeping its own "has save" boolean.
+	 *
+	 * "Most recent" is the codec's `savedAt` compared as the ISO-8601 STRINGS it
+	 * emits — never a local clock, which would make two engines disagree about the
+	 * same save directory. An unstamped save loses to a stamped one, and a tie
+	 * falls to the lower slot index, so the answer is total and deterministic.
+	 *
+	 * The shared corpus pins the ROWS, not this ordering (core's own main menu is
+	 * playthrough-based), so `ui_save_slots` derives its expectations from the
+	 * corpus instead: the answer is always a `can_load` row, it is never a
+	 * corrupted one, and it is the `savedAt`-maximal loadable row.
+	 */
+	int ContinueSlot() const;
+
+	/**
+	 * Why Continue is unavailable ("" when it is available). A corrupted slot
+	 * explains itself in MessageForOutcome's cross-engine words; a player with no
+	 * saves at all is simply told there are none. Disabled AND unexplained is the
+	 * state the main menu refuses to be in.
+	 */
+	std::string ContinueBlockedReason() const;
 
 	/** Human, cross-engine message for a non-ok outcome (empty for empty/ok). */
 	static std::string MessageForOutcome(const std::string& Outcome);

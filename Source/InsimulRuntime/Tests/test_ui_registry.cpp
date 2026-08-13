@@ -2,7 +2,7 @@
 //
 // test_ui_registry.cpp — host gate for the default-UI registry + loading
 // view-model + theme tokens (US-XU1). Builds under a plain clang toolchain (no
-// Unreal Engine, no UBT; see tools/verify-unreal/run-ui-tests.sh) and proves the
+// Unreal Engine, no UBT; ctest `ui_registry`) and proves the
 // Unreal cores against the SAME engine-neutral corpus every other default-UI
 // mirror runs (packages/core/conformance/ui/*.json), so the four legs (Babylon,
 // Unity, Godot, Unreal) can never diverge:
@@ -17,14 +17,30 @@
 // The UE seams (UInsimulUIRegistry / UInsimulUITheme UDataAssets, the loading
 // UUserWidget) sit ON TOP of these pure cores and are syntax-gated only.
 //
+// Tasklist 190 US-1 added the fourth leg — the MODULE GATE — and, more basically,
+// a gate that runs this file at all: until then it named a runner
+// (run-ui-tests.sh) that does not exist in this repository, so nothing compiled it.
+// It is ctest `ui_registry` now (tools/verify-unreal/CMakeLists.txt).
+//
+//   - panel catalog + module gate: the catalog an exported game ships
+//     (Content/Data/insimul/ui/panels.json) covers every corpus panel key, agrees
+//     with the built-in fallback map, names only modules core's activation table
+//     knows, and withholds exactly the panels whose module a genre did not select —
+//     with a creator override proven unable to ungate one.
+//
 // The conformance dir is argv[1] (the runner passes REPO/packages/core/
-// conformance/ui); it falls back to a path relative to this source file.
+// conformance/ui); it falls back to INSIMUL_UI_DIR, then to a path relative to this
+// source file. The shipped data dir is argv[2], falling back to
+// INSIMUL_ACTIVATION_DATA_DIR.
 
 #include "../Portable/InsimulUIRegistryModel.h"
 #include "../Portable/InsimulLoadingViewModel.h"
 #include "../Portable/InsimulUIThemeTokens.h"
+#include "../Portable/InsimulUIPanelCatalog.h"
+#include "../Portable/InsimulModuleActivation.h"
 #include "../Portable/InsimulJson.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -296,18 +312,398 @@ void RunThemeCases(const std::string& Dir) {
 		FInsimulUIThemeTokens::Color("nope").empty());
 }
 
+
+// ── Panel catalog + the module gate (tasklist 190 US-1) ──────────────────────
+//
+// The catalog and the activation table are read from the SHIPPED data dir — the
+// same two files an exported game loads — so a re-pointed panel or a re-vendored
+// table this gate would not notice cannot exist.
+
+bool LoadCatalog(const std::string& DataDir, FInsimulUIPanelCatalog& Out) {
+	const std::string Text = ReadFile(DataDir + "/ui/panels.json");
+	if (Text.empty()) {
+		Report("catalog: Content/Data/insimul/ui/panels.json is readable", false, DataDir);
+		return false;
+	}
+	std::string Error;
+	if (!FInsimulUIPanelCatalog::Parse(Text, Out, Error)) {
+		Report("catalog: panels.json parses", false, Error);
+		return false;
+	}
+	return true;
+}
+
+bool LoadTable(const std::string& DataDir, FInsimulActivationTable& Out) {
+	const std::string Text = ReadFile(DataDir + "/modules/genre-activation.json");
+	if (Text.empty()) {
+		Report("catalog: the activation table is readable", false, DataDir);
+		return false;
+	}
+	std::string Error;
+	if (!FInsimulActivationTable::Parse(Text, Out, Error)) {
+		Report("catalog: the activation table parses", false, Error);
+		return false;
+	}
+	return true;
+}
+
+/** Every module id the table names, across every genre it knows. */
+std::vector<std::string> TableModuleIds(const FInsimulActivationTable& Table) {
+	std::vector<std::string> Out;
+	for (const std::string& Genre : Table.Genres()) {
+		const FInsimulActiveModuleSet Set =
+			Table.Resolve(Genre, std::vector<std::string>(), EInsimulGenreSource::WorldIr);
+		for (const FInsimulActiveModule& Module : Set.Modules) {
+			if (std::find(Out.begin(), Out.end(), Module.Id) == Out.end()) {
+				Out.push_back(Module.Id);
+			}
+		}
+	}
+	return Out;
+}
+
+/**
+ * The check a mutated catalog must fail: every module a panel row names is one the
+ * activation table knows. A typo here would gate a panel out of EVERY world with no
+ * error anywhere, which is the quietest failure this feature can have.
+ */
+std::string UnknownModuleIn(const FInsimulUIPanelCatalog& Catalog, const FInsimulActivationTable& Table) {
+	const std::vector<std::string> Known = TableModuleIds(Table);
+	for (const std::string& Module : Catalog.Modules()) {
+		if (std::find(Known.begin(), Known.end(), Module) == Known.end()) {
+			return Module;
+		}
+	}
+	return std::string();
+}
+
+/** The genre activating the MOST of the catalog's modules, and one activating none. */
+void PickGenres(const FInsimulUIPanelCatalog& Catalog, const FInsimulActivationTable& Table,
+		std::string& OutOwner, std::string& OutEmpty) {
+	std::size_t Best = 0;
+	for (const std::string& Genre : Table.Genres()) {
+		const FInsimulActiveModuleSet Set =
+			Table.Resolve(Genre, std::vector<std::string>(), EInsimulGenreSource::WorldIr);
+		std::size_t Hits = 0;
+		for (const std::string& Module : Catalog.Modules()) {
+			if (Set.IsModuleActive(Module)) {
+				++Hits;
+			}
+		}
+		if (Hits > Best) {
+			Best = Hits;
+			OutOwner = Genre;
+		}
+		if (Hits == 0 && OutEmpty.empty()) {
+			OutEmpty = Genre;
+		}
+	}
+}
+
+void RunPanelCatalogCases(const std::string& CorpusDir, const std::string& DataDir) {
+	FInsimulUIPanelCatalog Catalog;
+	if (!LoadCatalog(DataDir, Catalog)) {
+		return;
+	}
+	Report("catalog: the shipped panels.json parses", true);
+
+	// 1. Every panel key the shared corpus names is in the shipped catalog.
+	FJsonValuePtr Root = LoadJson(CorpusDir, "registry-cases.json");
+	if (Root) {
+		const FJsonValue* Keys = Root->Find("panel_keys");
+		bool bAll = Keys && Keys->IsArray() && Keys->Size() > 0;
+		std::string Missing;
+		if (Keys && Keys->IsArray()) {
+			for (std::size_t i = 0; i < Keys->Size(); ++i) {
+				const std::string K = Keys->ArrayItems[i]->AsString();
+				if (Catalog.Find(K) == nullptr) {
+					bAll = false;
+					Missing = K;
+					break;
+				}
+			}
+		}
+		Report("catalog: covers every corpus panel_key", bAll,
+			Missing.empty() ? "" : ("no catalog row for '" + Missing + "'"));
+	}
+
+	// 2. The shipped catalog and the built-in fallback map are the same map. Two
+	//    sources for one fact is how they drift; this is the check that they cannot.
+	{
+		const std::vector<std::pair<std::string, std::string>> Fallback =
+			FInsimulUIRegistryModel::DefaultPanelMap();
+		bool bSame = Fallback.size() == Catalog.Entries().size();
+		std::string Detail;
+		for (const auto& Pair : Fallback) {
+			const FInsimulPanelEntry* Row = Catalog.Find(Pair.first);
+			if (!Row) {
+				bSame = false;
+				Detail = "the fallback map has '" + Pair.first + "' and the catalog does not";
+				break;
+			}
+			if (Row->Widget != Pair.second) {
+				bSame = false;
+				Detail = "'" + Pair.first + "' points at two different widgets";
+				break;
+			}
+		}
+		Report("catalog: agrees with the built-in fallback panel map", bSame, Detail);
+	}
+
+	// 3. Every row binds a widget.
+	{
+		std::string Empty;
+		for (const FInsimulPanelEntry& Row : Catalog.Entries()) {
+			if (Row.Widget.empty()) {
+				Empty = Row.Key;
+				break;
+			}
+		}
+		Report("catalog: every row binds a widget", Empty.empty(),
+			Empty.empty() ? "" : ("'" + Empty + "' binds nothing"));
+	}
+
+	// 4. Every module a row names is one core's activation table knows.
+	FInsimulActivationTable Table;
+	if (LoadTable(DataDir, Table)) {
+		const std::string Unknown = UnknownModuleIn(Catalog, Table);
+		Report("catalog: every owning module is one the activation table names", Unknown.empty(),
+			Unknown.empty() ? "" : ("no module '" + Unknown + "' in the table"));
+		// A catalog that owns nothing could not gate anything, so the gate checks
+		// below would pass vacuously.
+		Report("catalog: the catalog gates at least one panel", !Catalog.Modules().empty());
+	}
+}
+
+void RunModuleGateCases(const std::string& DataDir) {
+	FInsimulUIPanelCatalog Catalog;
+	FInsimulActivationTable Table;
+	if (!LoadCatalog(DataDir, Catalog) || !LoadTable(DataDir, Table)) {
+		return;
+	}
+
+	std::string OwnerGenre;
+	std::string EmptyGenre;
+	PickGenres(Catalog, Table, OwnerGenre, EmptyGenre);
+	if (OwnerGenre.empty() || EmptyGenre.empty()) {
+		Report("gate: the table has both an owning and a module-less genre", false,
+			"owner='" + OwnerGenre + "' empty='" + EmptyGenre + "'");
+		return;
+	}
+
+	const std::vector<std::string> AllKeys = Catalog.Keys();
+
+	// A genre that activates the owning modules shows every panel.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Resolver.SetActiveModules(
+			Table.Resolve(OwnerGenre, std::vector<std::string>(), EInsimulGenreSource::WorldIr));
+		Report("gate: a genre that activates the owning modules withholds nothing",
+			Resolver.IsGated() && Resolver.GatedKeys().empty() &&
+				Resolver.AvailableKeys().size() == AllKeys.size(),
+			OwnerGenre);
+	}
+
+	// A KNOWN genre that selected none of them withholds exactly those panels.
+	std::string GatedKey;
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Resolver.SetActiveModules(
+			Table.Resolve(EmptyGenre, std::vector<std::string>(), EInsimulGenreSource::WorldIr));
+
+		bool bExact = true;
+		std::string Detail;
+		for (const FInsimulPanelEntry& Row : Catalog.Entries()) {
+			const FInsimulPanelResolution R = Resolver.Peek(Row.Key);
+			const bool bShouldGate = !Row.Module.empty();
+			if (bShouldGate && R.Outcome != EInsimulPanelOutcome::Gated) {
+				bExact = false;
+				Detail = "'" + Row.Key + "' should be withheld and is not";
+				break;
+			}
+			if (!bShouldGate && !R.IsAvailable()) {
+				bExact = false;
+				Detail = "'" + Row.Key + "' should be available and is not";
+				break;
+			}
+			if (bShouldGate && GatedKey.empty()) {
+				GatedKey = Row.Key;
+			}
+		}
+		Report("gate: a genre with none of the owning modules withholds exactly those panels",
+			bExact, Detail);
+		Report("gate: available + withheld partition the catalog",
+			Resolver.AvailableKeys().size() + Resolver.GatedKeys().size() == AllKeys.size());
+		Report("gate: the report names what was withheld",
+			Resolver.Describe().find("withheld") != std::string::npos);
+
+		// The refusal is DIAGNOSED, never a silent empty panel.
+		const FInsimulPanelResolution R = Resolver.Resolve(GatedKey);
+		bool bDiagnosed = false;
+		for (const FUIRegistryDiagnostic& D : Resolver.Diagnostics()) {
+			if (D.Kind == "inactive_module" && D.Key == GatedKey && !D.Message.empty()) {
+				bDiagnosed = true;
+			}
+		}
+		Report("gate: a withheld panel resolves to nothing WITH a diagnostic",
+			R.Outcome == EInsimulPanelOutcome::Gated && R.Widget.empty() && !R.Detail.empty() &&
+				bDiagnosed);
+	}
+
+	// An UNKNOWN genre is not a free pass: it withholds every module-owned panel,
+	// the same refusal the pack consult makes.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		const FInsimulActiveModuleSet Set = Table.Resolve(
+			"a-genre-core-has-never-heard-of", std::vector<std::string>(), EInsimulGenreSource::WorldIr);
+		Resolver.SetActiveModules(Set);
+		std::size_t Owned = 0;
+		for (const FInsimulPanelEntry& Row : Catalog.Entries()) {
+			if (!Row.Module.empty()) {
+				++Owned;
+			}
+		}
+		Report("gate: an unknown genre inherits no module-owned panel",
+			!Set.bKnown && Owned > 0 && Resolver.GatedKeys().size() == Owned &&
+				Resolver.Peek(GatedKey).Outcome == EInsimulPanelOutcome::Gated);
+	}
+
+	// An UNDECLARED genre activates every pack, so it withholds no panel either —
+	// the two answers must not disagree.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Resolver.SetActiveModules(
+			Table.Resolve(std::string(), std::vector<std::string>(), EInsimulGenreSource::Undeclared));
+		Report("gate: an undeclared genre is UNGATED, as its pack consult is",
+			!Resolver.IsGated() && Resolver.GatedKeys().empty() &&
+				Resolver.AvailableKeys().size() == AllKeys.size());
+	}
+
+	// Nothing resolved yet is the same state, and says so.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Report("gate: a resolver with no module set applied shows every panel",
+			!Resolver.IsGated() && Resolver.AvailableKeys().size() == AllKeys.size() &&
+				Resolver.Describe().find("UNGATED") != std::string::npos);
+	}
+
+	// The override layer: it wins for a panel this world has …
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Resolver.SetActiveModules(
+			Table.Resolve(OwnerGenre, std::vector<std::string>(), EInsimulGenreSource::WorldIr));
+		const std::string Key = AllKeys.front();
+		Resolver.Override(Key, "/Game/Custom/WBP_Creator.WBP_Creator_C");
+		const FInsimulPanelResolution R = Resolver.Resolve(Key);
+		Report("gate: an overridden panel key resolves to the override",
+			R.Outcome == EInsimulPanelOutcome::Overridden &&
+				R.Widget == "/Game/Custom/WBP_Creator.WBP_Creator_C");
+	}
+
+	// … and it does NOT ungate one this world does not have. Swapping a widget says
+	// nothing about which modules the genre bundle selected.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		Resolver.SetActiveModules(
+			Table.Resolve(EmptyGenre, std::vector<std::string>(), EInsimulGenreSource::WorldIr));
+		Resolver.Override(GatedKey, "/Game/Custom/WBP_Creator.WBP_Creator_C");
+		const FInsimulPanelResolution R = Resolver.Resolve(GatedKey);
+		Report("gate: an override cannot ungate a withheld panel",
+			R.Outcome == EInsimulPanelOutcome::Gated && R.Widget.empty());
+	}
+
+	// An unknown key is still an unknown key, through the gate.
+	{
+		FInsimulUIPanelResolver Resolver(Catalog);
+		const FInsimulPanelResolution R = Resolver.Resolve("no_such_panel");
+		bool bDiagnosed = false;
+		for (const FUIRegistryDiagnostic& D : Resolver.Diagnostics()) {
+			if (D.Kind == "missing_panel" && D.Key == "no_such_panel") {
+				bDiagnosed = true;
+			}
+		}
+		Report("gate: an unknown panel key is unknown AND diagnosed",
+			R.Outcome == EInsimulPanelOutcome::Unknown && R.Widget.empty() && !R.Detail.empty() &&
+				bDiagnosed);
+	}
+}
+
+// ── Negative controls ────────────────────────────────────────────────────────
+//
+// A check that cannot fail is a decoration. Each trial below mutates one thing and
+// asserts the corresponding check above goes red.
+void RunNegativeControls(const std::string& DataDir) {
+	FInsimulUIPanelCatalog Ignored;
+	std::string Error;
+
+	Report("control: a document with no panels array is refused",
+		!FInsimulUIPanelCatalog::Parse("{\"version\":1}", Ignored, Error) && !Error.empty());
+	Report("control: a duplicate panel key is refused",
+		!FInsimulUIPanelCatalog::Parse(
+			"{\"panels\":[{\"key\":\"hud\",\"widget\":\"a\"},{\"key\":\"hud\",\"widget\":\"b\"}]}",
+			Ignored, Error));
+	Report("control: a row with no key is refused",
+		!FInsimulUIPanelCatalog::Parse("{\"panels\":[{\"widget\":\"a\"}]}", Ignored, Error));
+	Report("control: text that is not JSON is refused",
+		!FInsimulUIPanelCatalog::Parse("not json at all", Ignored, Error));
+
+	FInsimulActivationTable Table;
+	if (!LoadTable(DataDir, Table)) {
+		return;
+	}
+
+	// A catalog whose panel names a module the table does not know must be caught.
+	FInsimulUIPanelCatalog Mutated;
+	const bool bParsed = FInsimulUIPanelCatalog::Parse(
+		"{\"panels\":[{\"key\":\"hud\",\"widget\":\"w\",\"module\":\"a-module-core-never-emitted\"}]}",
+		Mutated, Error);
+	Report("control: a catalog naming an unknown module fails the table check",
+		bParsed && !UnknownModuleIn(Mutated, Table).empty());
+
+	// And the gate itself is not vacuous: the SAME panel resolves once its module is
+	// active, so "withheld" is a measurement rather than a constant.
+	FInsimulUIPanelCatalog Owned;
+	const std::vector<std::string> Known = TableModuleIds(Table);
+	if (bParsed && !Known.empty() &&
+		FInsimulUIPanelCatalog::Parse(
+			"{\"panels\":[{\"key\":\"hud\",\"widget\":\"w\",\"module\":\"" + Known.front() + "\"}]}",
+			Owned, Error)) {
+		FInsimulUIPanelResolver On(Owned);
+		On.SetActiveModuleIds({Known.front()});
+		FInsimulUIPanelResolver Off(Owned);
+		Off.SetActiveModuleIds({});
+		Report("control: the same panel resolves with its module on and is withheld with it off",
+			On.Peek("hud").IsAvailable() && Off.Peek("hud").Outcome == EInsimulPanelOutcome::Gated);
+	}
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
-	std::string Dir = argc > 1 ? argv[1] : "../../../../packages/core/conformance/ui";
+#ifdef INSIMUL_UI_DIR
+	const char* DefaultCorpus = INSIMUL_UI_DIR;
+#else
+	const char* DefaultCorpus = "../../../../packages/core/conformance/ui";
+#endif
+#ifdef INSIMUL_ACTIVATION_DATA_DIR
+	const char* DefaultData = INSIMUL_ACTIVATION_DATA_DIR;
+#else
+	const char* DefaultData = "../../../templates/project/Content/Data/insimul";
+#endif
+	std::string Dir = argc > 1 ? argv[1] : DefaultCorpus;
+	std::string DataDir = argc > 2 ? argv[2] : DefaultData;
 
-	std::printf("== Insimul default-UI host tests (US-XU1) ==\n");
+	std::printf("== Insimul default-UI host tests (US-XU1 + tasklist 190 US-1) ==\n");
 	std::printf("   corpus dir: %s\n", Dir.c_str());
+	std::printf("   data dir:   %s\n", DataDir.c_str());
 
 	RunRegistryCases(Dir);
 	RunDefaultMapChecks(Dir);
 	RunLoadingCases(Dir);
 	RunThemeCases(Dir);
+	RunPanelCatalogCases(Dir, DataDir);
+	RunModuleGateCases(DataDir);
+	RunNegativeControls(DataDir);
 
 	std::printf("\n  %d passed, %d failed\n", g_pass, g_fail);
 	return g_fail == 0 ? 0 : 1;

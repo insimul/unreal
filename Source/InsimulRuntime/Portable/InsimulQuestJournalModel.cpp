@@ -118,6 +118,17 @@ std::vector<FQuestEntry> FInsimulQuestJournalModel::Filtered() const {
 	return Out;
 }
 
+std::vector<FQuestEntry> FInsimulQuestJournalModel::WithStatus(const std::string& Status) const {
+	std::vector<FQuestEntry> Out;
+	for (const std::string& Id : Order) {
+		auto It = ById.find(Id);
+		if (It != ById.end() && It->second.Status == Status) {
+			Out.push_back(It->second);
+		}
+	}
+	return Out;
+}
+
 std::vector<std::string> FInsimulQuestJournalModel::FilteredIds() const {
 	std::vector<std::string> Out;
 	for (const FQuestEntry& Entry : Filtered()) {
