@@ -31,7 +31,15 @@ set(PORTABLE_SOURCES
     "${RUNTIME_DIR}/Portable/InsimulBootstrap.cpp"
     "${RUNTIME_DIR}/Portable/InsimulMechanicHosts.cpp"
     "${RUNTIME_DIR}/Portable/InsimulMechanicSurface.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulModuleActivation.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulModulePacks.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulMechanicScenario.cpp"
 )
+
+# The data an EXPORTED game reads: the vendored rule packs, the activation table and
+# the sample scene's script. The gates below read the SAME files a build ships, so a
+# re-vendored table nothing here would notice cannot exist.
+set(ACTIVATION_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../templates/project/Content/Data/insimul")
 
 # Golden fixtures shipped by packages/core (semantics authority).
 set(FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/saves")
@@ -211,6 +219,28 @@ target_include_directories(insimul_verify_mechanic_hosts PRIVATE ${INCLUDE_DIRS}
 target_compile_options(insimul_verify_mechanic_hosts PRIVATE ${WARN_FLAGS})
 add_test(NAME mechanic_hosts COMMAND insimul_verify_mechanic_hosts)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Modules activated from the GENRE BUNDLE (tasklist 146 US-3, §14).
+#
+#   module_activation    always built. Drives the resolver, the pack consult, the
+#                        host restriction and the scenario runner over the data an
+#                        exported game reads, with no native library — every
+#                        outcome, including the ones a healthy build never takes.
+#   activation_witness   built ONLY with libinsimul (below). The only place "was
+#                        this pack consulted" can actually be answered: a KB.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_module_activation
+    test_module_activation.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_module_activation PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_module_activation PRIVATE
+    INSIMUL_ACTIVATION_DATA_DIR="${ACTIVATION_DATA_DIR}"
+)
+target_compile_options(insimul_verify_module_activation PRIVATE ${WARN_FLAGS})
+add_test(NAME module_activation COMMAND insimul_verify_module_activation)
+
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it
 # somewhere explicit with either:
@@ -334,6 +364,31 @@ if(CORE_LIB)
   target_compile_options(insimul_verify_prolog_corpus PRIVATE ${WARN_FLAGS})
   target_link_libraries(insimul_verify_prolog_corpus PRIVATE "${INSIMUL_LIB}")
   add_test(NAME prolog_corpus COMMAND insimul_verify_prolog_corpus)
+
+  # ── an inactive module contributes NOTHING, witnessed in a KB (146 US-3) ──
+  # The only place that claim can be proved: consults each genre's active packs
+  # through the plugin's own ConsultActivePacks + insimul::InsimulKB and asks
+  # current_predicate/1 for every pack the build carries. Also executes the sample
+  # scene's scenario against the packs its genre activates.
+  add_executable(insimul_verify_activation_witness
+      test_activation_witness.cpp
+      "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+      "${RUNTIME_DIR}/Portable/InsimulModuleActivation.cpp"
+      "${RUNTIME_DIR}/Portable/InsimulModulePacks.cpp"
+      "${RUNTIME_DIR}/Portable/InsimulMechanicScenario.cpp"
+      "${RUNTIME_DIR}/Private/Prolog/InsimulKB.cpp"
+  )
+  target_include_directories(insimul_verify_activation_witness PRIVATE
+      ${INCLUDE_DIRS}
+      "${RUNTIME_DIR}/Private/Prolog"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../Source/ThirdParty/InsimulLibrary/include"
+  )
+  target_compile_definitions(insimul_verify_activation_witness PRIVATE
+      INSIMUL_ACTIVATION_DATA_DIR="${ACTIVATION_DATA_DIR}"
+  )
+  target_compile_options(insimul_verify_activation_witness PRIVATE ${WARN_FLAGS})
+  target_link_libraries(insimul_verify_activation_witness PRIVATE "${INSIMUL_LIB}")
+  add_test(NAME activation_witness COMMAND insimul_verify_activation_witness)
 else()
   # NOT a silent skip. The bridge is the whole point of the adoption, so its
   # absence is reported at configure time with the exact fix — but it is a

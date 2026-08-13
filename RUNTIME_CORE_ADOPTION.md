@@ -1393,6 +1393,182 @@ corpus; the Blueprint-facing layer above `InsimulKB` needs a real engine, and
 by anything, here or anywhere — only its size, its blocker and its unreachability
 are.
 
+## 14. US-3 of 146 — modules activated from the genre bundle
+
+US-1 implemented the host half and measured that none of it can be reached. US-2
+vendored the corpora and executed the half that has a runner. This story is the
+third part of an adoption and the only one a player would notice: **which modules
+a world turns on, and what an unselected one costs.**
+
+Core's module contract §7.2 is titled *"It is data, so a plugin does not hardcode
+a list"*, and §7.3 states the cost of not being selected in one sentence: **no
+consulted rule pack and no registered system.** Both halves are implemented here,
+and — this is the part worth the section — both are *witnessed* rather than
+asserted.
+
+| criterion | where it lives | what proves it |
+| --- | --- | --- |
+| the active set is read from the IR | `Portable/InsimulModuleActivation.{h,cpp}`, `templates/source/mechanics/InsimulModuleActivator.*` | `check:activation` (no module id or pack area appears in any activation source) + ctest `module_activation` |
+| an inactive module contributes nothing | `Portable/InsimulModulePacks.*`, `FInsimulMechanicHosts::RestrictTo` | **ctest `activation_witness`** — 8 genres × 11 packs, in a real KB |
+| a playable scene exercises two mechanics | `templates/source/mechanics/InsimulMechanicSampleScene.*` | its script is a file, and `activation_witness` executes the same file |
+
+### 14.1 Finding — the activation table names packs the C ABI cannot hand over
+
+The table tells a plugin *which* rule packs a genre consults. Nothing tells it
+where the **text** of those packs comes from. It is a TypeScript constant inside
+core's bundle (`PREDICATE_PACKS` in `src/prolog/predicate-packs.ts`), and the C
+ABI carries no row that returns one — `core.methods` still answers with the same
+five names ctest `mechanic_bridge` pins. So a native adapter can resolve a
+perfectly correct active module set and then consult **nothing**, which is the
+half of §7.3 that costs nothing to implement and proves nothing.
+
+The workaround is the same act as vendoring `conformance/`: the eleven packs are
+mirrored byte-for-byte into `templates/project/Content/Data/insimul/packs/`
+behind a manifest that pins core's commit, a sha256 and — importantly — core's
+**consult order**, which is a hard constraint rather than a preference (the
+routine and map packs write clauses for predicates the substrate declares
+`:- dynamic`, and a `:- dynamic` after a clause is a `permission_error` on a
+strict ISO engine). `tools/vendor-packs/vendor-packs.mjs` does the vendoring and
+the drift check; it **executes** core rather than parsing it, because the pack
+texts are assembled by five registries and a regex over the sources would have to
+re-implement that assembly.
+
+> **Amendment asked of core:** a `prolog.packs` bridge row returning
+> `{area, prolog, runtimePredicates}[]` in consult order. It deletes
+> `Content/Data/insimul/packs/`, `tools/vendor-packs/`, and one implementation of
+> `IInsimulPredicatePackSource` in each of the three engine repos.
+
+### 14.2 Finding — a save cannot answer "which modules is this world running"
+
+`activeModulesForWorld()` reads `ir.meta.genreConfig.id`. A `SaveFile`'s
+`worldSnapshot` carries no `meta` at all — its nine sections are
+`world / countries / settlements / characters / lots / quests / rules / actions /
+grammars` — so the *second* boot path of any engine, resuming a save, has nowhere
+to read the genre from. Measured, and pinned as a check in ctest
+`module_activation` so that core persisting the resolved set makes this repo fail
+and closes the finding.
+
+This plugin does not paper over it. `EInsimulGenreSource` reports **where the
+genre came from** — `WorldIr`, `Declared` (the game said so) or `Undeclared` —
+and the boot line prints it, because "which modules are on" is only as
+trustworthy as the answer to "who said so". A game with no genre at all gets
+*every* pack, which is core's own editor/tool default and is logged as a
+**warning** rather than taken as normal.
+
+> **Amendment asked of core:** persist the resolved active module set (or at
+> least the genre id) in the save envelope. Today a resumed game either re-reads
+> its World IR export or is told its own genre by hand.
+
+### 14.3 Finding — an inactive module's vocabulary RAISES rather than failing
+
+Core's traversal pack documents authored requirements that name *another*
+module's vocabulary: `traversal_requires(camp, ford, has_item(Actor, rope, 1))`.
+Under a genre that activates traversal and **not** the module owning the goal,
+that predicate is not in the KB at all, and the query does not fail — it raises.
+
+Measured here, independently of the Unity probe that first reported it, in ctest
+`activation_witness`:
+
+```
+§14.3 under genre 'adventure': RAISED — error(existence_error(procedure,has_skill/3),has_skill/3)
+```
+
+That matters to a *scene*, not to a corpus: a runner that folds "raised" into
+"did not hold" would show a player a refusal core never decided. So
+`insimul::RunScenario` keeps `Raised` apart from `Mismatched` as a distinct
+outcome, `AInsimulMechanicSampleScene::Act()` does nothing at all on it, and the
+gate **pins the measurement** — the day core makes a cross-module goal fail
+cleanly, `activation_witness` fails and the finding gets closed rather than
+forgotten.
+
+> **Amendment asked of core:** either declare the cross-module predicates a
+> requirement may name `:- dynamic` in the shared vocabulary pack, or state in
+> the contract that an authored goal naming an inactive module raises — so an
+> engine knows which of the two answers to write UI for.
+
+### 14.4 The scene, and exactly what it proves
+
+`AInsimulMechanicSampleScene` builds a guard, a dark courtyard and a wall. The
+engine measures (a line trace from the guard's eye, a separation, the movement
+mode at the wall), **core decides** (`detects/2`, `can_traverse/3`, out of its own
+packs, inside libinsimul), and the engine executes the answer. Two adopted
+mechanics end to end.
+
+The script is `Content/Data/insimul/scenarios/dark-courtyard.json` — five steps,
+each naming the module it exercises, the goal, the expected answer and what the
+scene *does* about it. The scene reads that file; ctest `activation_witness`
+reads the same file with the same reader (`insimul::FInsimulMechanicScenario`) and
+runs it through the same runner and the same library. That is what makes "a
+playable scene exercises at least two adopted mechanics" a gate rather than a
+screenshot:
+
+```
+scenario 'dark-courtyard' (genre 'rpg'): 5 step(s), mechanics exercised [perception, traversal]
+```
+
+**What it is not.** This is the **predicate** half of each module. The decision
+layers — `DetectionTracker`, `TraversalPlanner` — are still behind bridge rows
+that do not exist (§12.1), so no `observe()` call and no `traverse()` call happens
+in this scene or anywhere else. The fifth step is deliberately about a module the
+`rpg` bundle does **not** select, and it asserts the §7.3 cost from inside the
+running scene: `current_predicate(can_afford_stamina/2)` has no solutions.
+
+What no gate in this repo can do is move an actor. `VERIFICATION.md` US-M2 is that
+pass, and it is the only claim about this file a human has to make.
+
+### 14.5 Three deltas from the Unity probe, all measured rather than inherited
+
+Unity (tasklist 145 US-3) is the probe and this is the port. Three things are
+deliberately different, and each is a *measurement* this repo took:
+
+1. **The KB witness is a ctest, not a compiled-at-gate-time C driver.** Unity's
+   `check-activation.mjs` writes a C file, links it against libinsimul and drives
+   it line by line, because it has no C++ harness to put the claim in. This repo
+   does: `activation_witness` links the same library through
+   `insimul::InsimulKB` — the plugin's own wrapper, the same one
+   `UInsimulPrologSubsystem` wraps — and calls the plugin's own
+   `ConsultActivePacks`. A JavaScript re-implementation of the thing under test
+   would be a second implementation, which §4 rules out for adapters and which is
+   no more acceptable in a gate.
+2. **One KB per genre, in one process.** Unity spawns a process per script
+   because of two libinsimul defects (§13.2/§13.4) that are fixed at the shipping
+   `e019244`. Re-measured: eight create/consult/query/destroy cycles in one
+   process, clean.
+3. **`vite-node` is not the only way to execute core.** `vendor-packs.mjs`
+   resolves a runner rather than requiring one — `vite-node` when a checkout has
+   it, otherwise an `esbuild` bundle of the emitter run by node. Both execute
+   core's TypeScript, which is the property that matters; requiring the first
+   would have made re-vendoring impossible in a workspace whose core checkout
+   carries no `node_modules`. The runner used is printed, never assumed.
+
+One thing is deliberately the **same**: the split of "read the genre → resolve →
+consult in order", the three answers (known / unknown / undeclared), the pack
+manifest's shape and the `dark-courtyard` scenario. One mechanism across the
+engine repos, not three lookalikes.
+
+### 14.6 What is gated, and what still is not
+
+| claim | gate | binaries? |
+| --- | --- | --- |
+| the packs are core's, byte for byte | `check:packs --core` | no |
+| the table a BUILD reads is the vendored mirror | `check:activation` | no |
+| every genre resolves to the packs + hosts its module rows name | `check:activation` | no |
+| no module id or pack area is named in an activation source | `check:activation` | no |
+| the scenario names a known genre and ≥2 active mechanics | `check:activation` | no |
+| the resolver's three answers, the consult's four outcomes, the host restriction, the runner's five outcomes | **ctest `module_activation`** (444 checks) | no |
+| a save carries no genre (§14.2) | ctest `module_activation` | no |
+| **an inactive module's vocabulary is ABSENT from a real KB** | **ctest `activation_witness`** (8 genres × 11 packs) | **yes** |
+| **the scene's five steps get core's real answers** | **ctest `activation_witness`** | **yes** |
+| a cross-module goal still raises (§14.3) | ctest `activation_witness` | yes |
+
+Still not gated, and stated rather than implied: **every line of UE-coupled code
+in this story.** `UInsimulModuleActivator`, `UInsimulMechanicHostBinder`'s
+restriction call and `AInsimulMechanicSampleScene` need a real engine and a real
+level. What the gates prove is that the DATA those classes read is correct and
+complete, that the portable logic behind them is right in every branch, and that
+the decisions the scene asks for are the decisions core actually makes.
+`VERIFICATION.md` US-M2 is the human pass for the rest.
+
 ## Appendix A — `docs/UNIFICATION_ROADMAP.md` Decision 1
 
 That file lives in the **project checkout**, outside this submodule, so this
@@ -1530,7 +1706,7 @@ node tools/verify-mechanics/check-mechanics.mjs --core "$CORE" --write   # re-ve
 cp -R Source conformance tools /tmp/fakerepo/ && rm -rf /tmp/fakerepo/tools/verify-unreal/build
 cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/warn                            # warns, exit 0
 cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/fail -DINSIMUL_REQUIRE_BINARIES=ON  # exit 1
-ctest --test-dir /tmp/warn -N | tail -1                          # 11 legs, not 15
+ctest --test-dir /tmp/warn -N | tail -1                          # 12 legs, not 17
 
 # §13.1 what was vendored, what was not, and the floor
 node tools/vendor-conformance.mjs --core "$CORE"                 # 64 files, 5 exclusions printed
@@ -1550,4 +1726,27 @@ ctest --test-dir tools/verify-unreal/build -R prolog_corpus --output-on-failure
 node tools/verify-mechanics/check-mechanic-corpora.mjs           # 0 of 212, 11/11 controls
 node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE"      # + drift vs core
 node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE" --write
+
+# ── US-3 of 146 (§14) ───────────────────────────────────────────────────────
+
+# §14.1 the rule packs, vendored out of core by EXECUTING it. The runner is
+# resolved (vite-node, else esbuild + node) and printed, never assumed.
+node tools/vendor-packs/vendor-packs.mjs --core "$CORE" --write  # 11 packs, consult order
+node tools/vendor-packs/vendor-packs.mjs --check                 # hashes, no core needed
+node tools/vendor-packs/vendor-packs.mjs --check --core "$CORE"  # byte-for-byte vs core
+
+# §14.6 the table, the resolution, and the no-hardcoded-list criterion
+node tools/verify-mechanics/check-activation.mjs                 # 8 genres, 8 sources, 6 controls
+
+# §14.2 + the resolver/consult/restriction/runner, every branch, no library
+ctest --test-dir tools/verify-unreal/build -R module_activation --output-on-failure
+./tools/verify-unreal/build/insimul_verify_module_activation | tail -1     # OK: 444 check(s)
+
+# §14.3 + §14.4 the KB witness and the scene, EXECUTED. Needs libinsimul.
+ctest --test-dir tools/verify-unreal/build -R activation_witness --output-on-failure
+./tools/verify-unreal/build/insimul_verify_activation_witness | grep '§14.3'
+./tools/verify-unreal/build/insimul_verify_activation_witness | grep 'mechanics exercised'
+
+# the whole suite, after this story: 17 legs with an insimul-native checkout visible
+cd tools && npm run check && npm run check:host:binaries
 ```

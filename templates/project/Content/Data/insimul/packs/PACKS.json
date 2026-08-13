@@ -1,0 +1,147 @@
+{
+  "description": "Provenance + drift guard for the vendored @insimul/core rule packs. Each <area>.pl is a byte-for-byte mirror of that pack’s `prolog` text, and `consultOrder` is core’s own PREDICATE_PACKS order — a hard constraint, not a preference (the routine and map packs write clauses for predicates the substrate declares `:- dynamic`). The plugin consults the packs a genre activates, in this order, and nothing else. Regenerate with `node vendor-packs/vendor-packs.mjs --core <packages/core> --write`.",
+  "source": "@insimul/core (src/prolog/predicate-packs.ts — PREDICATE_PACKS, EXECUTED rather than parsed)",
+  "coreCommit": "76782e5e4fe35a981ab55845753632b8a7f3e0cc",
+  "consultOrder": [
+    "combat",
+    "perception",
+    "skill",
+    "traversal",
+    "equipment",
+    "stamina",
+    "gameplayState",
+    "agentAi",
+    "routine",
+    "map",
+    "scaffold"
+  ],
+  "alwaysActivePacks": [
+    "gameplayState",
+    "scaffold"
+  ],
+  "packs": {
+    "combat": {
+      "file": "combat.pl",
+      "bytes": 3260,
+      "sha256": "9ad42af8e152c2f0a94c4ddbe18f864fe51a66601a252716f88cc0ab4f6f4604",
+      "runtimePredicates": [
+        "in_combat/1",
+        "combat_target/2",
+        "threat/3",
+        "incapacitated/1"
+      ]
+    },
+    "perception": {
+      "file": "perception.pl",
+      "bytes": 4817,
+      "sha256": "a05578c5f6baed0d9881fade49263f84e09622c6249e91bb31e28200acde456c",
+      "runtimePredicates": [
+        "line_of_sight/2",
+        "concealed/1",
+        "noise_level/2",
+        "light_level/2",
+        "alerted/2",
+        "awareness/3",
+        "detection_state/3"
+      ]
+    },
+    "skill": {
+      "file": "skill.pl",
+      "bytes": 6698,
+      "sha256": "89b195f60af959ff8a0079311e27d195413295682c6da375ff3f12ff6b8ac737",
+      "runtimePredicates": [
+        "skill_xp/3",
+        "skill_points/3",
+        "skill_unlocked/2"
+      ]
+    },
+    "traversal": {
+      "file": "traversal.pl",
+      "bytes": 8854,
+      "sha256": "a3a5c0c5f030f03f0917b57333f7d7e84208496e6bb9e66c960f8204875b7721",
+      "runtimePredicates": [
+        "traversal_blocked/2",
+        "movement_mode/2",
+        "vehicle_owner/2",
+        "vehicle_occupant/2",
+        "vehicle_driver/2"
+      ]
+    },
+    "equipment": {
+      "file": "equipment.pl",
+      "bytes": 10040,
+      "sha256": "e5d3f7fcdc6c414e261a975cd55b3ebe89041b0668783626004a0214bc2dd023",
+      "runtimePredicates": [
+        "carry_capacity/2",
+        "item_condition/2",
+        "item_at/3"
+      ]
+    },
+    "stamina": {
+      "file": "stamina.pl",
+      "bytes": 2339,
+      "sha256": "8ce9355adc3edb8017e7f6329fd3d14ad281bf3cdab0fa7929a1597e88d2ed1b",
+      "runtimePredicates": []
+    },
+    "gameplayState": {
+      "file": "gameplayState.pl",
+      "bytes": 1479,
+      "sha256": "79c15382ecb7ba634eb2e25887fc4caf9035c8bbb7d05fdb2caf5760be182179",
+      "runtimePredicates": [
+        "health/3",
+        "energy/3",
+        "has_equipped/3",
+        "has_status/3",
+        "has_ability/2",
+        "near/3",
+        "at_location_type/2",
+        "level/2",
+        "xp/3",
+        "gold/2"
+      ]
+    },
+    "agentAi": {
+      "file": "agentAi.pl",
+      "bytes": 27909,
+      "sha256": "f2cb62d082b1deed72140e54201cea05a449e4d5a5adb4e8f69bf9b0c597cc69",
+      "runtimePredicates": [
+        "agent_belief_world/2",
+        "percept/4",
+        "percept_channel/2",
+        "percept_actor/2",
+        "perceived/4",
+        "target_kind/2",
+        "agent_motive/3",
+        "target_appeal/3",
+        "action_bias/3",
+        "act/4",
+        "violation_record/4",
+        "agent_goal/3",
+        "condition_met/2"
+      ]
+    },
+    "routine": {
+      "file": "routine.pl",
+      "bytes": 6967,
+      "sha256": "caea6ee690893abbef4da6ca950afc6cfb4e5ed85093ba4b7d8da93918bdec3c",
+      "runtimePredicates": [
+        "follows_routine/2",
+        "routine_suspended/2"
+      ]
+    },
+    "map": {
+      "file": "map.pl",
+      "bytes": 15804,
+      "sha256": "9b5f0a19e308f959f30d98ea7eb825682af9c3a3eb9dc6e42d496ac5a77aaf0b",
+      "runtimePredicates": []
+    },
+    "scaffold": {
+      "file": "scaffold.pl",
+      "bytes": 7820,
+      "sha256": "998a95f4b8b302e5ed83c200e40ee267f8685e19ef53c3e88f73169fc24ae795",
+      "runtimePredicates": [
+        "scaffold_active/1"
+      ]
+    }
+  }
+}

@@ -93,6 +93,32 @@ Prolog->RestoreFromString(Image);
 > **Thread affinity:** the KB is single-thread-owned. Every call must run on the
 > game thread — off-thread calls are logged and ignored (they return `false` / `""`).
 
+## What is already in the KB — the active module's rule packs
+
+An exported game does not start with an empty knowledge base. At boot,
+`UInsimulModuleActivator` reads the genre out of `Content/Data/WorldIR.json`
+(`meta.genreConfig.id`), looks it up in the table core emitted
+(`Content/Data/insimul/modules/genre-activation.json`) and **consults exactly the
+rule packs the modules that genre selects own** — combat's reach and legality rules,
+perception's detection rules, and so on — in core's own consult order.
+
+Two consequences are worth knowing before you query anything:
+
+- **A module the bundle did not select is ABSENT, not empty.** Its pack was never
+  consulted, so `current_predicate(can_afford_stamina/2)` has no solutions in a world
+  whose genre does not select the module that owns it — and a goal naming that
+  vocabulary **raises** rather than failing. Check `current_predicate/1` first if you
+  are writing rules that may span modules.
+- **The active set is data.** Adding a module to a genre bundle is a change in core
+  plus a re-vendor here; no engine code names a mechanic. The boot log
+  (`LogInsimulActivation`) prints the genre, where it came from, the modules, the
+  packs consulted and the packs deliberately skipped.
+
+The packs themselves are vendored under `Content/Data/insimul/packs/` with a
+`PACKS.json` that pins core's commit and a sha256 per pack — see that directory's
+`README.md`, and `RUNTIME_CORE_ADOPTION.md` §14 for why the text is shipped as data
+at all.
+
 ## Building it: the native library
 
 The engine is a native library, `libinsimul`, vendored under
@@ -100,4 +126,5 @@ The engine is a native library, `libinsimul`, vendored under
 editor, stage the library for your platform into
 `Source/ThirdParty/InsimulLibrary/lib/<Mac|Linux|Win64>/` — see that module's
 `lib/README.md`. The in-editor smoke checklist for the subsystem is in
-[`../VERIFICATION.md`](../VERIFICATION.md) (US-XP3).
+[`../VERIFICATION.md`](../VERIFICATION.md) (US-XP3); the activation pass above is
+US-M2 in the same file.

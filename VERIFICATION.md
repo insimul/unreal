@@ -824,3 +824,82 @@ exception, `AddModifier` landing without a preset, plain C++ implementations beh
 one reflected binder, and the portable half being executed by a gate here. Anything
 else — a different fallback, a re-priced action, a re-rolled damage number — is a
 bug against US-M1.
+
+---
+
+## US-M2 — modules activated from the genre bundle (Unreal editor required)
+
+Tasklist 146 US-3. This world's active mechanic modules are now read out of the
+genre bundle core emitted, the packs they own are consulted into the KB, the hosts
+no active module names are unregistered, and a sample scene lets two adopted
+mechanics decide something. `RUNTIME_CORE_ADOPTION.md` §14 is the write-up; read
+§14.4 first, because the scene exercises the **predicate** half of each module and
+the decision layers are still unreachable — that is a pass, not a failure.
+
+### 0. Automated pre-checks (run before the human pass)
+
+```sh
+cd tools
+npm run check                 # adds check:packs + check:activation (6 controls)
+npm run check:host:binaries   # adds module_activation + activation_witness
+```
+
+- [ ] `check:activation` prints 8 genres, 8 activation sources with no mechanic
+      named in any of them, and 1 scenario.
+- [ ] `ctest module_activation` passes (444 checks) — the resolver's three answers,
+      the consult's four outcomes, the host restriction and the runner's five
+      outcomes, over the data an exported game reads.
+- [ ] `ctest activation_witness` passes (112 checks) and prints
+      `witnessed 8 genre(s) x 11 pack(s)`, the scenario's five steps, and the
+      §14.3 line — an authored requirement naming an inactive module's vocabulary
+      still **RAISES**. If that line no longer says RAISED, core changed and §14.3
+      is stale.
+
+### 1. Boot log — which modules this world turns on, and who said so
+
+- [ ] Play an exported game. `LogInsimulActivation` carries one line naming the
+      genre, **where it came from** (`from the World IR` for an exported world),
+      the active modules, the consulted packs and the active host interfaces.
+- [ ] The next line names the packs that were **not** consulted. It is not empty
+      for any real genre, and every name in it belongs to a module this world's
+      bundle did not select.
+- [ ] `LogInsimulMechanicSurface` then warns once per host it **unregistered**:
+      "implemented and UNREGISTERED — no module this world activates names it".
+      Cross-check one against the activation line: it must not appear there.
+
+### 2. The three answers, deliberately provoked
+
+- [ ] Set `UInsimulModuleActivator::DeclaredGenre` to a genre core does not know
+      and re-run `ActivateForGenre`: a **warning** naming the genre, the shared
+      vocabulary consulted, and **no** mechanic module active. Not a crash, and not
+      a silent fallback to every module.
+- [ ] Rename `Content/Data/WorldIR.json` and play: a **warning** that no genre was
+      declared, and every pack consulted. That is core's editor default and is
+      wrong for a shipped game — which is exactly what the warning says.
+- [ ] Rename `Content/Data/insimul/packs/` and play: an **error** per active pack
+      and a final error that the modules owning them cannot answer. Nothing
+      pretends to have booted.
+
+### 3. The scene (the two-mechanics claim)
+
+- [ ] Drop `AInsimulMechanicSampleScene` into a level, point `GuardActor` and
+      `PlayerActor` at two pawns with something solid between them, and play. The
+      log prints five steps; the two `perception` and two `traversal` steps read
+      `→ <what the scene did>`, and the fifth reports that an inactive module's
+      vocabulary is absent.
+- [ ] Move the player into clear line of sight of the guard and re-run
+      (`RunScene`): the first step's answer **changes**, because the probe's
+      reading changed. That is the whole claim — the engine measured, core decided.
+- [ ] Set `bUseLiveProbes = false` and re-run: the log says the readings were
+      **REPLAYED**, and the answers match ctest `activation_witness` exactly. A
+      replay must never be reported as a measurement.
+- [ ] Delete the scenario file and play: one error naming the path, and no steps.
+
+### Deltas vs Unity/Godot
+
+**Expected: the three in §14.5**, and no others — the KB witness is a ctest rather
+than a compiled-at-gate-time C driver, one KB per genre in one process, and a
+resolved rather than required TypeScript runner for re-vendoring. The activation
+semantics themselves (the three answers, the consult order, what an inactive module
+costs) are core's and must be identical across the three engines. Anything else is
+a bug against US-M2.

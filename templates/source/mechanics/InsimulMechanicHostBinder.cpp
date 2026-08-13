@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "InsimulMechanicSurface.h"
+#include "InsimulModuleActivator.h"
 #include "InsimulRadiantSourceShell.h"
 #include "../systems/SurvivalSystem.h"
 
@@ -26,6 +27,10 @@ namespace
 void UInsimulMechanicHostBinder::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
+
+    // The active module set has to exist before the hosts are restricted to it, and
+    // subsystem initialisation order is otherwise unspecified.
+    Collection.InitializeDependency<UInsimulModuleActivator>();
 
     UWorld* World = GetGameInstance() != nullptr ? GetGameInstance()->GetWorld() : nullptr;
     USurvivalSystem* Survival = GetGameInstance() != nullptr
@@ -65,6 +70,11 @@ void UInsimulMechanicHostBinder::Initialize(FSubsystemCollectionBase& Collection
 
     // One libinsimulcore runtime, borrowed from the plugin's own owner of it.
     CoreShell = NewObject<UInsimulRadiantSourceShell>(this);
+
+    // Order matters: wire everything, then take away what this world does not
+    // activate. Restricting first would leave a later wire-up re-registering a host
+    // no active module names.
+    RestrictHostsToActiveModules();
 
     LogMechanicSurface();
 }
@@ -146,6 +156,41 @@ float UInsimulMechanicHostBinder::GetEntityHealth(const FString& EntityId) const
         return 0.f;
     }
     return static_cast<float>(CombatHost->GetHealth(ToStdString(EntityId)));
+}
+
+int32 UInsimulMechanicHostBinder::RestrictHostsToActiveModules()
+{
+    UInsimulModuleActivator* Activator = GetGameInstance() != nullptr
+        ? GetGameInstance()->GetSubsystem<UInsimulModuleActivator>()
+        : nullptr;
+
+    if (Activator == nullptr || !Activator->IsResolved())
+    {
+        // NOT a silent "register everything": a build whose activation never resolved
+        // is a build whose activation data is missing or unreadable, and the activator
+        // has already logged which. Restricting against a set nobody resolved would
+        // unregister every host on a bug in the data.
+        UE_LOG(LogInsimulMechanicSurface, Error,
+            TEXT("[Insimul] No active module set was resolved, so NO host was unregistered. Every wired host stays ")
+            TEXT("registered and may be called for a module this world never selected — see the ")
+            TEXT("LogInsimulActivation errors above."));
+        return -1;
+    }
+
+    const std::vector<std::string> Dropped = MechanicHosts.RestrictTo(Activator->ActiveHostInterfaces());
+    UE_LOG(LogInsimulMechanicSurface, Log,
+        TEXT("[Insimul] %s"), *ToFString(Activator->ActiveModuleSet().Describe()));
+
+    for (const std::string& Name : Dropped)
+    {
+        // Warning, not Log: a creator whose host is never called deserves the reason
+        // in their own log rather than in this comment.
+        UE_LOG(LogInsimulMechanicSurface, Warning,
+            TEXT("[Insimul]   %s is implemented and UNREGISTERED — no module this world activates names it, so ")
+            TEXT("core would never call it (module contract §7.3)."),
+            *ToFString(Name));
+    }
+    return static_cast<int32>(Dropped.size());
 }
 
 int32 UInsimulMechanicHostBinder::LogMechanicSurface()

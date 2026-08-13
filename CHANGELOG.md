@@ -12,6 +12,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Modules activated from the genre bundle, not from a hardcoded list (US-3 of 146).**
+  An exported game now reads which mechanic modules this world turns on out of the
+  table core emits, consults exactly the rule packs they own, and unregisters every
+  host no active module names. Adding a module to a genre bundle in core is a
+  re-vendor here and **no engine code change** — `check:activation` fails if a module
+  id or a pack area ever appears in an activation source.
+  - `Source/InsimulRuntime/Portable/InsimulModuleActivation.{h,cpp}` resolves a genre
+    against the vendored table, keeping core's three answers apart exactly as
+    module-contract §7.3 states them: a KNOWN genre gets its modules; an UNKNOWN one
+    gets the shared vocabulary and nothing else; **no genre declared** gets every pack
+    (right for a commandlet, a warning in a game). `EInsimulGenreSource` reports which
+    of the three happened and who said so.
+  - `Portable/InsimulModulePacks.{h,cpp}` consults the active packs **in core's
+    consult order** (a hard constraint — a `:- dynamic` after a clause is a
+    `permission_error`) and names every pack it refused to consult.
+    `FInsimulMechanicHosts::RestrictTo` is the other half of §7.3's cost: a wired host
+    whose interface no active module names is unregistered, and the drop is logged.
+  - **The rule packs are vendored as data the game ships.** No C ABI row returns a
+    pack (`core.methods` still answers with five names), so
+    `tools/vendor-packs/vendor-packs.mjs` mirrors core's eleven `PREDICATE_PACKS`
+    byte-for-byte into `templates/project/Content/Data/insimul/packs/` behind a
+    manifest carrying core's commit, a sha256 and the consult order. It **executes**
+    core rather than parsing it, resolving a runner (`vite-node`, else `esbuild` +
+    node) instead of requiring one. RUNTIME_CORE_ADOPTION.md §14.1 asks core for the
+    `prolog.packs` row that would delete all of it.
+  - **A playable scene, whose script is a file.** `AInsimulMechanicSampleScene` builds
+    a guard, a dark courtyard and a wall: the probes measure, core's own packs decide
+    (`detects/2`, `can_traverse/3`), the scene executes the answer. Its steps live in
+    `Content/Data/insimul/scenarios/dark-courtyard.json`, so ctest
+    `activation_witness` runs the same five steps through the same library — **2
+    mechanics end to end**, as a gate rather than a screenshot.
+  - **New gates.** `check:packs` and `check:activation` (six negative controls) are
+    toolchain-free; ctest **`module_activation`** (444 checks) drives the resolver,
+    the consult, the host restriction and the scenario runner over the data a build
+    reads, with no library; ctest **`activation_witness`** is the only honest witness
+    for "an inactive module contributes nothing" — for all 8 genres × 11 packs, each
+    pack's own signature predicate is in a real KB **exactly when** its module is
+    active, and `current_predicate(can_afford_stamina/2)` has no solutions in an `rpg`
+    world. 17 ctest legs with binaries, 12 without.
+  - **Three findings, all core-side (§14).** The activation table names packs the C
+    ABI cannot hand over (§14.1); a `SaveFile`'s `worldSnapshot` carries no genre, so
+    a resumed game cannot resolve its own module set (§14.2); and an authored
+    requirement naming an INACTIVE module's vocabulary **raises** rather than failing —
+    measured here independently under `adventure` as
+    `existence_error(procedure, has_skill/3)`, and pinned so that fixing it core-side
+    fails this repo and closes the finding (§14.3).
 - **The band-120 conformance corpora, vendored AND executed (US-2 of 146).**
   `conformance/` grew from 34 mirrored files to **64** at core `76782e5` — the seven
   band-120 decision areas (`combat/`, `items/`, `routines/`, `skills/`, `stealth/`,

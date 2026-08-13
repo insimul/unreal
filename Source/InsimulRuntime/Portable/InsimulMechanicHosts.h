@@ -107,10 +107,25 @@ public:
 
 	/**
 	 * Every interface name this container can hold, in core's order — the eight the
-	 * band names. A list, not a switch, so a later story's RestrictTo cannot fall
-	 * behind Has().
+	 * band names. A list, not a switch, so RestrictTo() cannot fall behind Has().
 	 */
 	static const std::vector<std::string>& Slots();
+
+	/**
+	 * UNREGISTER every host whose interface no active module names — the second half
+	 * of "an inactive module contributes nothing" (core's module contract §7.3: no
+	 * consulted rule pack AND no registered system). A game that wires a combat host
+	 * under a genre with no combat module keeps its component and loses the
+	 * registration, and the returned list names every drop so a creator sees it
+	 * rather than wondering why their host is never called.
+	 *
+	 * @param ActiveInterfaces The active set's host interfaces. An EMPTY list drops
+	 *        everything, which is the correct reading of a genre that selects no
+	 *        module; the "no activation resolved at all" case is the caller's to
+	 *        report, and is why this takes the list rather than reaching for one.
+	 * @return The interfaces that were wired and are now not, in Slots() order.
+	 */
+	std::vector<std::string> RestrictTo(const std::vector<std::string>& ActiveInterfaces);
 
 	// ── the fallbacks, exactly as core's contracts state them ─────────────────
 

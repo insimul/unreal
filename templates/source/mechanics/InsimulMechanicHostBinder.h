@@ -82,6 +82,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Insimul|Mechanics")
     int32 LogMechanicSurface();
 
+    /**
+     * UNREGISTER every host whose interface no ACTIVE module names — the second half
+     * of "an inactive module contributes nothing" (core's module contract §7.3; the
+     * first half is UInsimulModuleActivator not consulting the pack). Runs once at
+     * Initialize and again whenever the world's active set changes; every drop is
+     * logged, because a host that is silently never called is the failure this
+     * replaces.
+     *
+     * @return the number of hosts unregistered, or -1 when no module set has been
+     *         resolved at all — in which case NOTHING is restricted and the log says
+     *         so rather than leaving a game guessing which of the two happened.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|Mechanics")
+    int32 RestrictHostsToActiveModules();
+
     /** The host half, for a system that needs to ask a probe directly. Its fallbacks
      *  are core's documented ones, implemented once. */
     const insimul::FInsimulMechanicHosts& Hosts() const { return MechanicHosts; }

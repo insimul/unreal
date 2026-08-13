@@ -81,6 +81,47 @@ const std::vector<std::string>& FInsimulMechanicHosts::Slots() {
 	return Names;
 }
 
+std::vector<std::string> FInsimulMechanicHosts::RestrictTo(const std::vector<std::string>& ActiveInterfaces) {
+	// Slots() drives the loop so a slot added to the container without a line here
+	// is dropped by default rather than silently surviving every restriction.
+	std::vector<std::string> Dropped;
+	for (const std::string& Name : Slots()) {
+		bool bActive = false;
+		for (const std::string& Active : ActiveInterfaces) {
+			if (Active == Name) {
+				bActive = true;
+				break;
+			}
+		}
+		if (bActive || !Has(Name)) {
+			continue;
+		}
+		// Clearing a slot UNREGISTERS. It never destroys — every pointer here is
+		// borrowed and the game still owns the object (see the header).
+		if (Name == "ICombatSystem") Combat = nullptr;
+		else if (Name == "ISurvivalSystem") Survival = nullptr;
+		else if (Name == "ICombatStatSink") Adapter.CombatStats = nullptr;
+		else if (Name == "ITrajectoryProbe") Adapter.Trajectory = nullptr;
+		else if (Name == "IPerceptionProbe") Adapter.Perception = nullptr;
+		else if (Name == "ITraversalProbe") Adapter.Traversal = nullptr;
+		else if (Name == "ILocomotionHost") Adapter.Locomotion = nullptr;
+		else if (Name == "ISkillModifierSink") Adapter.SkillModifiers = nullptr;
+		Dropped.push_back(Name);
+	}
+	// A slot that survived the clear would make this a no-op that reads as a drop.
+	std::string Survivor;
+	for (const std::string& Name : Dropped) {
+		if (Has(Name)) {
+			Survivor = Name;
+			break;
+		}
+	}
+	if (!Survivor.empty()) {
+		Dropped.push_back("INTERNAL: " + Survivor + " reported dropped and is still registered");
+	}
+	return Dropped;
+}
+
 FTrajectoryReading FInsimulMechanicHosts::Ask(const FTrajectoryQuery& Query) const {
 	FTrajectoryReading Reading;
 	Reading.bClear = true;
