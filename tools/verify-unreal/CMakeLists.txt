@@ -66,6 +66,10 @@ set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/ui")
 if(NOT EXISTS "${UI_DIR}")
   set(UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/ui")
 endif()
+set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/items")
+if(NOT EXISTS "${ITEMS_DIR}")
+  set(ITEMS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/items")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
 
@@ -281,6 +285,68 @@ target_compile_definitions(insimul_verify_ui_registry PRIVATE
 )
 target_compile_options(insimul_verify_ui_registry PRIVATE ${WARN_FLAGS})
 add_test(NAME ui_registry COMMAND insimul_verify_ui_registry)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The quest + trade panels (tasklist 190 US-2, docs/ui.md).
+#
+# These two sources existed before this story and were compiled by NOTHING — the
+# runners they name (run-quest-ui-tests.sh, run-trade-ui-tests.sh) belong to the
+# parent platform checkout and do not exist here, so "the shared view-model cases
+# pass" was a claim with no gate behind it, exactly as ui_registry was. Both read
+# the vendored corpus every engine leg runs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_quest_journal
+    "${RUNTIME_DIR}/Tests/test_quest_journal.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulNotifications.cpp"
+)
+target_include_directories(insimul_verify_ui_quest_journal PRIVATE ${INCLUDE_DIRS})
+target_compile_options(insimul_verify_ui_quest_journal PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_quest_journal COMMAND insimul_verify_ui_quest_journal "${UI_DIR}")
+
+add_executable(insimul_verify_ui_trade
+    "${RUNTIME_DIR}/Tests/test_trade.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+)
+target_include_directories(insimul_verify_ui_trade PRIVATE ${INCLUDE_DIRS})
+target_compile_options(insimul_verify_ui_trade PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_trade COMMAND insimul_verify_ui_trade "${UI_DIR}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shop + REPUTATION, EQUIPMENT, and the state-location invariant (190 US-2).
+#
+# The first two read the band-124 items corpora — a price is a function of the
+# simulation rather than a shop table, and the world declares its own equipment
+# slots — and diff the canonical projection of every case byte for byte. The third
+# loads a REAL SaveFile fixture, runs the panels' ops through it, and asserts the
+# change is in the save's canonical bytes, that a re-hydrate reproduces it, that
+# everything outside currentState is untouched, and that the census is conserved:
+# playthrough data lives in the save file and nowhere else.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_state_binding
+    "${RUNTIME_DIR}/Tests/test_ui_state_binding.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradePricing.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulEquipmentModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIStateBinding.cpp"
+)
+target_include_directories(insimul_verify_ui_state_binding PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_state_binding PRIVATE
+    INSIMUL_ITEMS_DIR="${ITEMS_DIR}"
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+)
+target_compile_options(insimul_verify_ui_state_binding PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_state_binding COMMAND insimul_verify_ui_state_binding)
 
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it

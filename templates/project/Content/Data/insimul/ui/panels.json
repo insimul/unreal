@@ -66,6 +66,54 @@
       "notes": "Pricing and the transaction ledger are the equipment module's decision layers."
     },
     {
+      "key": "equipment",
+      "widget": "/Game/UI/WBP_EquipmentPanel.WBP_EquipmentPanel_C",
+      "module": "equipment",
+      "notes": "The worn set, its armour and the carried weight. The slots are the WORLD's (the module's IR section declares them), so without the module there is no slot table to render."
+    },
+    {
+      "key": "skill_tree",
+      "widget": "/Game/UI/WBP_SkillTree.WBP_SkillTree_C",
+      "module": "skill",
+      "notes": "Tiers and unlocks over the skill module's progression layer; a world without it has no proficiency vocabulary for the nodes to read."
+    },
+    {
+      "key": "minimap",
+      "widget": "/Game/UI/WBP_Minimap.WBP_Minimap_C",
+      "module": "map",
+      "notes": "The HUD corner map. The HUD frame itself is unconditional; this sub-panel is not."
+    },
+    {
+      "key": "world_map",
+      "widget": "/Game/UI/WBP_WorldMap.WBP_WorldMap_C",
+      "module": "map",
+      "notes": "The fullscreen map with its markers and fast-travel targets."
+    },
+    {
+      "key": "quickbar",
+      "widget": "/Game/UI/WBP_ActionQuickBar.WBP_ActionQuickBar_C",
+      "module": "",
+      "notes": "Action shortcuts over the shared action vocabulary — every world has actions."
+    },
+    {
+      "key": "radial_menu",
+      "widget": "/Game/UI/WBP_RadialMenu.WBP_RadialMenu_C",
+      "module": "",
+      "notes": "The gamepad wheel over the same entries the quickbar holds."
+    },
+    {
+      "key": "notice_board",
+      "widget": "/Game/UI/WBP_NoticeBoard.WBP_NoticeBoard_C",
+      "module": "",
+      "notes": "Available offers, posted rather than pushed. Quests are not a mechanic module, so every genre bundle carries the board."
+    },
+    {
+      "key": "documents",
+      "widget": "/Game/UI/WBP_DocumentReader.WBP_DocumentReader_C",
+      "module": "",
+      "notes": "Letters, books and notices the player reads; authored content, not a mechanic."
+    },
+    {
       "key": "dialogue",
       "widget": "/Game/UI/WBP_Dialogue.WBP_Dialogue_C",
       "module": "",

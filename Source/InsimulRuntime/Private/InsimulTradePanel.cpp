@@ -8,7 +8,13 @@
 
 #include "InsimulTradePanel.h"
 
+#include "InsimulRuntimeSubsystem.h"
+
+#include "../Portable/InsimulBootstrap.h"
+#include "../Portable/InsimulSaveSystem.h"
 #include "../Portable/InsimulTradeModel.h"
+#include "../Portable/InsimulTradePricing.h"
+#include "../Portable/InsimulUIStateBinding.h"
 
 namespace
 {
@@ -60,9 +66,9 @@ insimul::FInsimulTradeModel& UInsimulTradePanel::EnsureModel()
 {
 	if (!State.IsValid())
 	{
-		// In a live game the save shell hydrates this from save.currentState
-		// (player.gold/inventory, containers.containers, npcs.merchantStates); here it
-		// starts empty so a Blueprint call before hydration is always safe.
+		// BindToRuntime() fills this from save.currentState (player.gold/inventory,
+		// containers.containers, npcs.merchantStates); until it does, the slice is
+		// empty so a Blueprint call before hydration is always safe.
 		State = MakeUnique<insimul::FTradeState>();
 	}
 	if (!Model.IsValid())
@@ -115,6 +121,124 @@ FInsimulTradeResult UInsimulTradePanel::Buy(const FString& MerchantId, const FSt
 FInsimulTradeResult UInsimulTradePanel::Sell(const FString& MerchantId, const FString& ItemId, int32 Qty)
 {
 	return FromResult(EnsureModel().Sell(ToStd(MerchantId), ToStd(ItemId), Qty));
+}
+
+bool UInsimulTradePanel::BindToRuntime(UInsimulRuntimeSubsystem* Runtime)
+{
+	BoundRuntime = nullptr;
+	if (!Runtime || !Runtime->Context())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Insimul trade panel: no booted runtime to bind to; the panel would "
+				 "show an inventory that is not this playthrough's."));
+		return false;
+	}
+
+	const insimul::FJsonValue* SaveFile = Runtime->Context()->Save().SaveFile();
+	if (!SaveFile)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Insimul trade panel: the runtime has no loaded save."));
+		return false;
+	}
+
+	// EnsureModel first: it is what allocates the slice the binding fills, and a
+	// Blueprint may call BindToRuntime before any other method has touched us.
+	EnsureModel();
+
+	std::string Error;
+	if (!insimul::FInsimulUIStateBinding::HydrateTrade(*SaveFile, *State, Error))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Insimul trade panel: %s"), *ToFString(Error));
+		return false;
+	}
+	BoundRuntime = Runtime;
+	return true;
+}
+
+bool UInsimulTradePanel::CommitToSave()
+{
+	UInsimulRuntimeSubsystem* Runtime = BoundRuntime.Get();
+	if (!Runtime || !Runtime->Context() || !State.IsValid())
+	{
+		return false;
+	}
+	insimul::FJsonValue* SaveFile = Runtime->Context()->Save().MutableSaveFile();
+	if (!SaveFile)
+	{
+		return false;
+	}
+	std::string Error;
+	if (!insimul::FInsimulUIStateBinding::ApplyTrade(*State, *SaveFile, Error))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Insimul trade panel: %s"), *ToFString(Error));
+		return false;
+	}
+	return true;
+}
+
+FInsimulPriceQuote UInsimulTradePanel::QuotePrice(const FString& MerchantId, const FString& ItemId,
+	int32 Qty, bool bSell) const
+{
+	FInsimulPriceQuote Out;
+	Out.Quantity = Qty;
+
+	const UInsimulRuntimeSubsystem* Runtime = BoundRuntime.Get();
+	const insimul::FJsonValue* SaveFile =
+		(Runtime && Runtime->Context()) ? Runtime->Context()->Save().SaveFile() : nullptr;
+
+	insimul::FPriceMarket Market;
+	if (SaveFile)
+	{
+		std::string Error;
+		insimul::FInsimulUIStateBinding::HydrateMarket(*SaveFile, ToStd(MerchantId),
+			ToStd(ItemId), Market, Error);
+	}
+
+	// The catalogue row this panel can see is the stack itself: a merchant's shelf
+	// carries the authored value, which is the base the terms are summed against.
+	insimul::FPriceItem Item;
+	Item.Id = ToStd(ItemId);
+	if (State.IsValid())
+	{
+		const auto Found = State->Merchants.find(ToStd(MerchantId));
+		const std::vector<insimul::FTradeItem>* Shelf =
+			(Found != State->Merchants.end()) ? &Found->second.Items : nullptr;
+		const std::vector<insimul::FTradeItem>* Bag = bSell ? &State->PlayerInventory : Shelf;
+		if (Bag)
+		{
+			for (const insimul::FTradeItem& Stack : *Bag)
+			{
+				if (Stack.ItemId != Item.Id)
+				{
+					continue;
+				}
+				Item.bDeclared = true;
+				Item.Value = Stack.Value;
+				Item.SellValue = Stack.Value;
+				break;
+			}
+		}
+	}
+
+	const insimul::FPriceQuote Quote = insimul::FInsimulTradePricing::Quote(
+		Item, Market, insimul::FPriceTuning(), std::string(),
+		bSell ? "sell" : "buy", Qty);
+
+	Out.Base = static_cast<int32>(Quote.Base);
+	Out.Unit = static_cast<int32>(Quote.Unit);
+	Out.Quantity = static_cast<int32>(Quote.Quantity);
+	Out.Total = static_cast<int32>(Quote.Total);
+	Out.bFallback = Quote.bFallback;
+	for (const insimul::FPriceAdjustment& Adj : Quote.Adjustments)
+	{
+		FInsimulPriceTerm Term;
+		Term.Factor = ToFString(Adj.Factor);
+		Term.Percent = static_cast<int32>(Adj.Percent);
+		Term.Amount = static_cast<int32>(Adj.Amount);
+		Term.Subject = ToFString(Adj.Subject);
+		Out.Terms.Add(Term);
+	}
+	return Out;
 }
 
 void UInsimulTradePanel::BeginDestroy()
