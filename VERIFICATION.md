@@ -3,9 +3,17 @@
 The native-Prolog stack has two verification tiers:
 
 1. **Automated, in this harness** — the plain-C++ `insimul::InsimulKB` core is
-   unit- and conformance-tested on the host clang toolchain against a real
-   `libinsimul` (`npm run engines:unreal:host`), and every UE `.h/.cpp` passes the
-   structural syntax gate (`npm run engines:check`). See `tools/README.md`.
+   conformance-tested on the host clang toolchain against a real `libinsimul`:
+   ctest **`prolog_corpus`** drives all **255** vendored `conformance/prolog` cases
+   (including the 125 band-120 `mechanic-*` cases) through `InsimulKB` and diffs
+   core's golden solution sets. It is one of the four legs that need the native
+   library, so run `npm run check:host:binaries` from `tools/` — plain
+   `check:host` drops them with a configure-time warning. Every UE `.h/.cpp` also
+   passes the structural syntax gate (`npm run engines:check`).
+
+   Until tasklist 146 US-2 this paragraph promised something no gate did:
+   `conformance/prolog/` was hash-checked and executed by nothing (see
+   `RUNTIME_CORE_ADOPTION.md` §6.5 and §13.2). It is true now.
 2. **Human, in a real UE editor** — the UE-coupled layer (subsystems, actors,
    widgets) cannot be built in this harness (no Unreal SDK / UBT), so it is
    syntax-gated only and verified by a person following the checklists below.

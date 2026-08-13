@@ -12,6 +12,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The band-120 conformance corpora, vendored AND executed (US-2 of 146).**
+  `conformance/` grew from 34 mirrored files to **64** at core `76782e5` — the seven
+  band-120 decision areas (`combat/`, `items/`, `routines/`, `skills/`, `stealth/`,
+  `traversal/`), the module-activation table, and ten new Prolog packs. 529 cases in
+  ten areas.
+  - **`prolog_corpus` — the corpus is EXECUTED now.** `conformance/prolog/` used to be
+    checked for provenance only: present, hashed, byte-identical to core, and run by
+    nothing this repo could invoke. `tools/verify-unreal/test_prolog_corpus.cpp` drives
+    all **255 cases** — including the **125 band-120 `mechanic-*` cases** — through
+    `insimul::InsimulKB`, the plugin's own `libinsimul` wrapper (the same class
+    `UInsimulPrologSubsystem` wraps), and diffs core's golden solution sets as an
+    unordered multiset. 255/255. It carries a case floor, a required-pack list, live /
+    negative / syntax controls, and it checks the one documented corpus amendment
+    **both ways** — a rewrite that matches nothing fails as stale, and a case that
+    starts passing unamended fails as obsolete.
+  - **`check:mechanic-corpora` — the decision half, measured rather than pretended.**
+    The other 212 cases cannot be executed in any language: reaching a decision layer
+    means a row in `native/corebridge/js/entry.js` and there are none. The new gate
+    pins every area, file and case count; requires every `executedBy` to name a file
+    that exists and a ctest target CMake registers; requires every unexecuted area to
+    state its blocker; mirrors the bridge method list from `test_mechanic_hosts.cpp`
+    so an ARRIVING mechanic row fails as loudly as a vanishing one; checks the
+    vendored genre-activation table against `MODULE_HOSTS.json`; and proves all of it
+    can fail with **eleven negative controls**.
 - **The band-120 mechanic host half — eight interfaces, implemented (US-1 of 146).**
   Core's seven mechanic modules in band 120–125 name eight distinct host interfaces
   (`ICombatSystem`, `ISurvivalSystem`, `ICombatStatSink`, `ITrajectoryProbe`,
@@ -240,6 +264,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `npm run engines:check`. Policy + editor loop documented in `docs/reimport.md`;
   human checklist in `VERIFICATION.md` (US-XG4). `InsimulEditor.Build.cs` gains
   `AssetRegistry` + `Blutility`/`UMG`/`UMGEditor` deps for the utility widget.
+- **`VENDORED.json` guards a floor, not just hashes (US-2 of 146).** The manifest gained
+  `cases` (exact per-area counts, re-derived on `--check`) and `caseFloor` (the largest
+  count ever vendored, which never drops on its own). Hashes cannot see a corpus
+  *shrink* — a trimmed `cases` array re-hashes clean — so a re-vendor that would lower a
+  floor now fails and names the area; `--allow-corpus-shrink` is the explicit act of
+  accepting one. `--core` re-vendoring also prunes mirrors core has dropped. Mechanism,
+  flag names and manifest keys ported unchanged from Unity (tasklist 145 US-2).
+- **Corpora core ships and this repo deliberately does not mirror are now declared.**
+  `editor/`, `generation/`, `ai/`, `map/` and `grounding/` each carry a stated reason and
+  are printed with a file count on every `--core` run, so a corpus for an unadopted
+  surface stops reading as drift.
+- `npm run check` gained `check:mechanic-corpora`; `check:host:binaries` gained the
+  `prolog_corpus` leg (15 ctest legs, up from 14).
+
+### Fixed
+- **Re-measured and documented: the `libinsimul` KB-lifetime defects are gone.** Unity's
+  probe spawns a fresh process per Prolog case because the library it measured (git
+  `f1548a4`) aborted on the second `insimul_kb_destroy` in a process and broke
+  library-module loading after ~64 leaked KBs. Against the shipping library (git
+  `e019244`, trealla v2.106.1): 200 create/consult/query/destroy cycles in one process,
+  clean. `prolog_corpus` therefore runs all 255 cases in-process — and is now the
+  standing regression test for both defects. `RUNTIME_CORE_ADOPTION.md` §13.2.
 
 ### Notes
 - `EngineVersion` is intentionally left unset: this is a source plugin that builds

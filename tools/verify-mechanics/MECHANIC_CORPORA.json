@@ -1,0 +1,111 @@
+{
+  "description": "What the band-120 DECISION-layer corpora are, and which of them this engine can actually execute. `executedBy` is the runner for an area, or null with a stated blocker. `bridgeMethods` mirrors test_mechanic_hosts.cpp so a mechanic row ARRIVING is as loud as one disappearing. Regenerate with `node verify-mechanics/check-mechanic-corpora.mjs --core <packages/core> --write`.",
+  "source": "@insimul/core (packages/core/conformance)",
+  "coreCommit": "76782e5e4fe35a981ab55845753632b8a7f3e0cc",
+  "bridgeMethods": [
+    "core.methods",
+    "quest.hydrate",
+    "quest.radiantTick",
+    "radiant.baseTemplates",
+    "radiant.generate"
+  ],
+  "predicateHalf": {
+    "note": "conformance/prolog/mechanic-*.json is the other half of this adoption and IS executed — all 255 cases in conformance/prolog/ run through insimul::InsimulKB, the plugin’s own libinsimul wrapper, and are diffed against core’s golden solution sets.",
+    "packs": {
+      "mechanic-combat.json": 10,
+      "mechanic-equipment.json": 29,
+      "mechanic-gameplay-state.json": 9,
+      "mechanic-perception.json": 12,
+      "mechanic-routine.json": 19,
+      "mechanic-skill.json": 14,
+      "mechanic-stamina.json": 10,
+      "mechanic-traversal.json": 22
+    },
+    "cases": 125,
+    "executedBy": {
+      "file": "tools/verify-unreal/test_prolog_corpus.cpp",
+      "ctest": "prolog_corpus"
+    }
+  },
+  "areas": {
+    "combat": {
+      "modules": [
+        "combat",
+        "stamina"
+      ],
+      "files": {
+        "action-table.json": 5,
+        "resolution.json": 18
+      },
+      "cases": 23,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    },
+    "items": {
+      "modules": [
+        "equipment"
+      ],
+      "files": {
+        "equipping.json": 12,
+        "placement.json": 7,
+        "pricing.json": 12,
+        "transactions.json": 12
+      },
+      "cases": 43,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    },
+    "routines": {
+      "modules": [
+        "routine"
+      ],
+      "files": {
+        "goals.json": 14,
+        "intents.json": 21,
+        "interruption.json": 10
+      },
+      "cases": 45,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    },
+    "skills": {
+      "modules": [
+        "skill"
+      ],
+      "files": {
+        "advancement.json": 12,
+        "effects.json": 11,
+        "trees.json": 6,
+        "unlocks.json": 12
+      },
+      "cases": 41,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    },
+    "stealth": {
+      "modules": [
+        "perception"
+      ],
+      "files": {
+        "actions.json": 6,
+        "detection.json": 16
+      },
+      "cases": 22,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    },
+    "traversal": {
+      "modules": [
+        "traversal"
+      ],
+      "files": {
+        "affordances.json": 14,
+        "fast-travel.json": 10,
+        "vehicles.json": 14
+      },
+      "cases": 38,
+      "executedBy": null,
+      "blocker": "no bridge row: native/corebridge/js/entry.js exposes radiant.* and quest.* only, so this area has no runner in any language (RUNTIME_CORE_ADOPTION.md sections 12.2 and 13)"
+    }
+  }
+}

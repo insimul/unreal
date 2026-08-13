@@ -1223,6 +1223,176 @@ listed there rather than implied here.
 
 ---
 
+## 13. US-2 of 146 — the band-120 corpora, vendored and executed
+
+Adopting a mechanic module brings **two** corpora, and they are in completely
+different states in this repo. Reporting one number for both is how a checked-in
+file passes for a gate, so this section reports them apart.
+
+| half | what it is | cases | runner here |
+| --- | --- | --- | --- |
+| **predicate** | `conformance/prolog/mechanic-*.json` — the modules' Prolog vocabulary | **125** (of 255 in the directory) | **ctest `prolog_corpus`**, all 255 |
+| **decision** | `conformance/{combat,items,routines,skills,stealth,traversal}/` — `CombatResolver`, `Market`, `DetectionTracker` … called with an input, diffed against an expected result | **212** | **none**, and §13.2 is why |
+
+### 13.1 What was vendored, and what was deliberately not
+
+`npm run vendor:conformance -- --core <packages/core>` mirrored **64 files** at
+core `76782e5`, up from 34. The seven band-120 decision areas and the ten new
+Prolog packs are the growth:
+
+```
+23 combat / 43 items / 255 prolog / 7 quests / 11 radiant /
+45 routines / 41 skills / 22 stealth / 38 traversal / 44 ui     = 529 cases
+```
+
+Five core-side prefixes are **not** mirrored, each with the reason printed on
+every `--core` run (`NOT_MIRRORED` in `tools/vendor-conformance.mjs`):
+
+| prefix | why not |
+| --- | --- |
+| `editor/` | editor-core adoption is a later wave (tasklist 101). This repo ships the runtime. |
+| `generation/` | the shipped `libinsimulcore` answers `core.methods` with no `generation.*` row. |
+| `ai/` | `agentAi` is out of band 120–125 — no host interface here implements it. Its predicate half **is** vendored and executed (`prolog/agent-ai.json`, 15 cases). |
+| `map/` | `map` is out of band 120–125. Its predicate half **is** vendored and executed (`prolog/geo-map.json`, 15 cases). |
+| `grounding/` | KGP pack *data* (tasklist 152) — no `cases` array, no golden vectors, and no grounding surface here to run them against. |
+
+Without that list, every corpus core adds for a surface this repo has not adopted
+reads as DRIFT and the real signal drowns. With it, an exclusion is a visible act
+with a count beside it, not a silence.
+
+**The manifest now guards a floor, not just a hash.** `VENDORED.json` grew
+`cases` (the exact per-area count of the checked-in tree, re-derived on every
+`--check`) and `caseFloor` (the largest count ever vendored, which does not drop
+on its own). Hashes alone cannot see a corpus *shrink*: a file whose `cases` array
+is trimmed and re-hashed passes every other check in that script. A re-vendor that
+would lower a floor fails and names the area; `--allow-corpus-shrink` is the
+explicit, visible act of accepting one. The mechanism, the flag names and the
+manifest keys are Unity's (tasklist 145 US-2), ported unchanged — one mechanism
+across the engine repos, not three lookalikes.
+
+### 13.2 The predicate half — executed, 255 of 255
+
+Before this story `conformance/prolog/` was checked for **provenance only**:
+present, hashed, byte-identical to core, and executed by nothing this repo can
+run. That is the same failure the corpus guard itself was written for, one level
+up — and it is why US-2's acceptance criterion says *a vendored corpus nothing
+runs is a checked-in file, which this repo has shipped before*.
+
+`tools/verify-unreal/test_prolog_corpus.cpp` (ctest **`prolog_corpus`**) runs
+every case through **`insimul::InsimulKB`** — the plugin's own RAII wrapper over
+the `libinsimul` C ABI, the same class `UInsimulPrologSubsystem` wraps in
+UStructs. It is not a second reader written for the gate: it is this repo's
+shipping Prolog path, pointed at core's vectors. Solution sets are compared as an
+unordered **multiset** with integral-number normalization — `conformance/README.md`'s
+order-insensitivity rule, the same canonicalization core's TS runner and Unity's
+`check-prolog.mjs` use.
+
+```
+255 case(s) executed, 1 amendment rewrite(s) applied, 0 failure(s)
+```
+
+Three things keep that number honest:
+
+1. **A floor and a required-file list.** 255 cases could be reached with the
+   band-120 packs missing entirely, so the eight `mechanic-*` packs plus
+   `agent-ai`, `geo-map` and `scaffold` are named individually and must each
+   contribute cases.
+2. **The amendment is checked both ways.** The corpus is authored against
+   tau-prolog and left **unamended on disk**; exactly one case
+   (`assert-retract::asserta-prepends`, which uses `log/1` where Trealla registers
+   `log` as a static builtin) is rewritten in memory with a printed `[AMEND]`
+   line. A rewrite rule that silently decides a verdict is exactly the kind of
+   thing that rots, so the test fails if a declared row matches *nothing* (stale
+   table) **and** if the amended case now passes *unamended* (obsolete rewrite).
+3. **Live, negative and syntax controls.** A trivial goal with a known answer, the
+   same goal against a deliberately wrong expectation, and a malformed program.
+   "255 of 255 matched" only means something if a mismatch, a wrong comparison and
+   a consult error could each have been seen in this process.
+
+**A libinsimul defect Unity had to work around is fixed, and this leg is now its
+regression test.** Unity's `check-prolog.mjs` spawns a fresh **process per case**
+(~40 ms each) because the `libinsimul` it measured (git `f1548a4`) aborted with
+SIGTRAP on the *second* `insimul_kb_destroy` in a process, and leaking KBs instead
+broke library-module loading after ~64. Re-measured here against the shipping
+library (git `e019244`, trealla v2.106.1): **200 create / consult / query / destroy
+cycles in one process, clean.** Both defects are gone, so this leg runs all 255
+cases in-process — and because it does, it *is* the standing regression test: if
+either comes back, the binary crashes or its consults start failing, and ctest
+says so. That is a finding for core's side, recorded here rather than worked
+around silently.
+
+### 13.3 The decision half — 0 of 212, measured and named
+
+Not one of the 212 decision-layer cases can be executed **in any language**, and
+the reason is the one §12.2 already recorded: reaching a decision layer means a
+row in `native/corebridge/js/entry.js`, and there are no mechanic rows. The
+shipped `libinsimulcore` answers `core.methods` with exactly five names —
+`core.methods`, `quest.hydrate`, `quest.radiantTick`, `radiant.baseTemplates`,
+`radiant.generate` — which ctest `mechanic_bridge` measures against the real
+library and pins.
+
+`tools/verify-mechanics/check-mechanic-corpora.mjs` is the gate that keeps that
+statement true rather than letting it age into a paragraph. It does **not**
+pretend to execute; it measures, and every part of the measurement can fail:
+
+| it checks | so that |
+| --- | --- |
+| every area, file and case count against `MECHANIC_CORPORA.json` | a corpus that **appears**, grows or shrinks is a failure that names itself |
+| every `executedBy` names a file that exists **and** a ctest target CMake registers | a runner named in a manifest and absent from the build is the same rot one level up |
+| every area without a runner carries a stated `blocker` | a silent `null` reads as "nothing to do here" |
+| the pinned method list against `EXPECTED_METHODS[]` in `test_mechanic_hosts.cpp` | one measurement site, one mirror, and drift between them fails |
+| the vendored `modules/genre-activation.json` against `MODULE_HOSTS.json` | core moving a host interface out from under the plugin is caught — this is the one band-120 corpus check that runs **today** |
+| **eleven negative controls** | "0 of 212 executable" is a measurement, not a decoration |
+
+It needs no binaries on purpose. The single fact that would — asking
+`core.methods` — is already measured once by ctest `mechanic_bridge` under
+`--require-binaries`; driving the C ABI a second time from Node would give this
+repo two places to measure one fact and two places for them to disagree.
+
+**A mechanic row ARRIVING fails this gate as loudly as one disappearing.** That is
+deliberate: an arrived row means 212 cases suddenly have a runner and this file
+has to be pointed at them, which is a change nobody should be able to land
+quietly.
+
+### 13.4 Divergence, classified
+
+Nothing was amended away. Three divergences exist and all three are recorded
+above rather than smoothed over:
+
+1. **212 decision cases vendored with no runner.** *Core-side, blocked.* Not a
+   defect in this repo and not fixable here — it needs the entry.js rows §12.3
+   proposes. Vendoring them anyway is the right call: the counts are pinned, so
+   the day a row lands the gate says how much is now reachable.
+2. **Five corpus prefixes not mirrored.** *Scope, declared.* Printed with a count
+   and a reason on every re-vendor.
+3. **Unity spawns a process per Prolog case; this repo does not.** *Engine-side,
+   resolved.* The defect that forced it is fixed in the shipping library
+   (§13.2); the difference is a measurement, not a divergence in what the two
+   engines prove.
+
+One more, from §12.5's list and still true: this repo's portable half is
+**executed** by a gate where Unity's equivalent is read by a human. The
+`prolog_corpus` leg extends that — the corpus half is executed here too.
+
+### 13.5 What is gated, and what still is not
+
+| claim | gate | binaries? |
+| --- | --- | --- |
+| the corpus is a byte-for-byte mirror of core | `vendor-conformance.mjs --check --core` | no |
+| no area silently shrank | `VENDORED.json` `cases` + `caseFloor` | no |
+| the band-120 decision corpora are what the manifest says | `check:mechanic-corpora` | no |
+| every unexecuted area names its blocker | `check:mechanic-corpora` | no |
+| the activation table matches the implemented host surface | `check:mechanic-corpora` | no |
+| **all 255 Prolog cases match core's golden solution sets** | **ctest `prolog_corpus`** | **yes** |
+| the bridge still answers with no mechanic row | ctest `mechanic_bridge` | yes |
+
+Still not gated, and stated rather than implied: `UInsimulPrologSubsystem`'s
+UStruct marshalling. `prolog_corpus` proves `libinsimul` + `InsimulKB` + the
+corpus; the Blueprint-facing layer above `InsimulKB` needs a real engine, and
+`VERIFICATION.md` is its pass. And the decision half is not gated *as behaviour*
+by anything, here or anywhere — only its size, its blocker and its unreachability
+are.
+
 ## Appendix A — `docs/UNIFICATION_ROADMAP.md` Decision 1
 
 That file lives in the **project checkout**, outside this submodule, so this
@@ -1360,4 +1530,24 @@ node tools/verify-mechanics/check-mechanics.mjs --core "$CORE" --write   # re-ve
 cp -R Source conformance tools /tmp/fakerepo/ && rm -rf /tmp/fakerepo/tools/verify-unreal/build
 cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/warn                            # warns, exit 0
 cmake -S /tmp/fakerepo/tools/verify-unreal -B /tmp/fail -DINSIMUL_REQUIRE_BINARIES=ON  # exit 1
+ctest --test-dir /tmp/warn -N | tail -1                          # 11 legs, not 15
+
+# §13.1 what was vendored, what was not, and the floor
+node tools/vendor-conformance.mjs --core "$CORE"                 # 64 files, 5 exclusions printed
+node tools/vendor-conformance.mjs --check                        # 529 cases, 10 areas, at/above floor
+node tools/vendor-conformance.mjs --check --core "$CORE"         # byte-identical to core
+
+# §13.2 the predicate half, executed
+ctest --test-dir tools/verify-unreal/build -R prolog_corpus --output-on-failure
+./tools/verify-unreal/build/insimul_verify_prolog_corpus | tail -3   # 255/255, 1 [AMEND]
+
+# §13.2 the libinsimul KB-lifetime defects Unity had to work around — re-measured.
+# 200 create/consult/query/destroy cycles in ONE process; §6.7 and Unity's
+# check-prolog.mjs record the versions where this aborted on the second destroy.
+./tools/verify-unreal/build/insimul_verify_prolog_corpus | head -2   # library version + 255 KBs
+
+# §13.3 the decision half: what is vendored, and what can run it
+node tools/verify-mechanics/check-mechanic-corpora.mjs           # 0 of 212, 11/11 controls
+node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE"      # + drift vs core
+node tools/verify-mechanics/check-mechanic-corpora.mjs --core "$CORE" --write
 ```

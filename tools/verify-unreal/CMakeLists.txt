@@ -50,6 +50,10 @@ set(RADIANT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/radiant")
 if(NOT EXISTS "${RADIANT_DIR}")
   set(RADIANT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/radiant")
 endif()
+set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../conformance/prolog")
+if(NOT EXISTS "${PROLOG_DIR}")
+  set(PROLOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/prolog")
+endif()
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
 
@@ -306,6 +310,30 @@ if(CORE_LIB)
   target_compile_options(insimul_verify_mechanic_bridge PRIVATE ${WARN_FLAGS})
   target_link_libraries(insimul_verify_mechanic_bridge PRIVATE "${CORE_LIB}" "${INSIMUL_LIB}")
   add_test(NAME mechanic_bridge COMMAND insimul_verify_mechanic_bridge --bridge)
+
+  # ── the band-120 PREDICATE half, EXECUTED (146 US-2) ──────────────────────
+  # Drives every vendored conformance/prolog case through insimul::InsimulKB —
+  # the plugin's own wrapper over libinsimul, not a second reader — and diffs the
+  # golden solution sets. This is the gate that stops `conformance/prolog/` from
+  # being a checked-in file nothing runs; it needs only libinsimul, but it is
+  # registered in this block so it shares the one discovery and the one
+  # --require-binaries contract with the bridge legs.
+  add_executable(insimul_verify_prolog_corpus
+      test_prolog_corpus.cpp
+      "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+      "${RUNTIME_DIR}/Private/Prolog/InsimulKB.cpp"
+  )
+  target_include_directories(insimul_verify_prolog_corpus PRIVATE
+      ${INCLUDE_DIRS}
+      "${RUNTIME_DIR}/Private/Prolog"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../Source/ThirdParty/InsimulLibrary/include"
+  )
+  target_compile_definitions(insimul_verify_prolog_corpus PRIVATE
+      INSIMUL_PROLOG_DIR="${PROLOG_DIR}"
+  )
+  target_compile_options(insimul_verify_prolog_corpus PRIVATE ${WARN_FLAGS})
+  target_link_libraries(insimul_verify_prolog_corpus PRIVATE "${INSIMUL_LIB}")
+  add_test(NAME prolog_corpus COMMAND insimul_verify_prolog_corpus)
 else()
   # NOT a silent skip. The bridge is the whole point of the adoption, so its
   # absence is reported at configure time with the exact fix — but it is a
@@ -319,7 +347,7 @@ else()
     set(_missing_binaries_level WARNING)
   endif()
   message(${_missing_binaries_level}
-      "radiant_bridge + quest_parity_core + mechanic_bridge NOT built: no libinsimulcore.a + libinsimul.a found.\n"
+      "radiant_bridge + quest_parity_core + mechanic_bridge + prolog_corpus NOT built: no libinsimulcore.a + libinsimul.a found.\n"
       "  The full-stack radiant gate (11 corpus vectors through core's real\n"
       "  TypeScript) and the three-leg quest parity diff will NOT run. The stub\n"
       "  leg (radiant_source) and the two-leg quest_parity still do.\n"
