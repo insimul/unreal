@@ -1,7 +1,7 @@
 // Copyright 2024 Insimul. All Rights Reserved.
 //
 // FInsimulSaveSlotModel implementation — see InsimulSaveSlotModel.h. std-only;
-// host-tested by run-dialogue-ui-tests.sh against save-slot-cases.json.
+// host-tested by ctest `ui_save_slots` against save-slot-cases.json.
 
 #include "InsimulSaveSlotModel.h"
 
@@ -102,6 +102,41 @@ FSlotView FInsimulSaveSlotModel::Slot(int Index) const {
 		}
 	}
 	return FSlotView();
+}
+
+int FInsimulSaveSlotModel::ContinueSlot() const {
+	int Best = -1;
+	std::string BestSavedAt;
+	for (const FSlotResult& R : Results) {
+		// Loadability is View()'s answer, so the corrupted-envelope rule is stated
+		// once: a tampered save cannot be the slot Continue resumes.
+		if (!View(R).bCanLoad) {
+			continue;
+		}
+		const std::string SavedAt = R.bHasSummary ? R.Summary.SavedAt : std::string();
+		// A later stamp wins; an equal stamp falls to the lower slot index. Stated
+		// as a comparison rather than left to the order the caller happened to hand
+		// its slots in, so two engines reading one directory answer alike.
+		if (Best < 0 || SavedAt > BestSavedAt || (SavedAt == BestSavedAt && R.Index < Best)) {
+			Best = R.Index;
+			BestSavedAt = SavedAt;
+		}
+	}
+	return Best;
+}
+
+std::string FInsimulSaveSlotModel::ContinueBlockedReason() const {
+	if (ContinueSlot() >= 0) {
+		return std::string();
+	}
+	// Slots() is index-ordered, so the slot that speaks for a directory holding
+	// several broken saves is the first one, not the first one the caller listed.
+	for (const FSlotView& Row : Slots()) {
+		if (Row.Status == "corrupted" && !Row.Message.empty()) {
+			return Row.Message;
+		}
+	}
+	return "No saved game to continue.";
 }
 
 bool FInsimulSaveSlotModel::HasAnyLoadable() const {

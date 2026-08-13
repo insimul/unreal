@@ -16,6 +16,11 @@
 //   npcs.merchantStates[id]               -> the merchant panel
 //   quests.progress / quests.dynamicQuests-> the journal / tracker / offer panels
 //
+// and the one slice that is NOT under currentState, because the save schema has
+// never put it there (US-3 of tasklist 190):
+//
+//   conversations[npcCharacterId]         -> the dialogue panel's history
+//
 // AND THE TITLES COME FROM THE QUEST SYSTEM. A journal row is not the save's
 // `name` field: the quest's Prolog `content` is the single source of truth
 // (InsimulQuestSystem.h), so hydration produces the title, the difficulty and the
@@ -40,6 +45,7 @@
 
 #pragma once
 
+#include "InsimulChatModel.h"
 #include "InsimulEquipmentModel.h"
 #include "InsimulJson.h"
 #include "InsimulQuestJournalModel.h"
@@ -111,6 +117,40 @@ public:
 	static bool HydrateLedger(const FJsonValue& SaveRoot, const std::string& Actor,
 		FItemLedger& Out, std::string& OutError);
 
+	// ── Conversations (the dialogue panel's history) ─────────────────────────
+	//
+	// The ONE exception to "the panels read currentState": a conversation is not
+	// playthrough STATE, it is the transcript, and the save schema has carried it
+	// as its own top-level `conversations` array (ConversationSummary rows) since
+	// v1. So the dialogue panel persists there and nowhere else — a port that
+	// invented `currentState.dialogue` would be this leg disagreeing with the
+	// other three about what a save contains, which is the failure the state
+	// invariant exists to stop.
+
+	/**
+	 * Read the persisted turns for one character out of save.conversations. A save
+	 * that has never spoken to this character yields an EMPTY history rather than
+	 * an error: absence is the normal first-meeting case. A `conversations` that is
+	 * present and is not an array IS an error — that document is not a save.
+	 */
+	static bool HydrateConversation(const FJsonValue& SaveRoot, const std::string& CharacterId,
+		FChatHistory& Out, std::string& OutError);
+
+	/**
+	 * Write a panel's history back into save.conversations IN PLACE. The row for
+	 * CharacterId takes `recentTurns` + `totalTurnCount` (and `npcCharacterName`
+	 * when one is given); every OTHER field of that row — the compressed history,
+	 * the last location, the topics a language world tracks — is preserved, as is
+	 * every other row. A character the save has no row for gets one appended.
+	 * currentState is never touched.
+	 *
+	 * A turn's `timestamp` is written only when the caller stamped one: the clock
+	 * belongs to the host, and a port that minted its own would produce saves that
+	 * differ from the other three legs' byte for byte.
+	 */
+	static bool ApplyConversation(const std::string& CharacterId, const std::string& CharacterName,
+		const FChatHistory& History, FJsonValue& SaveRoot, std::string& OutError);
+
 	// ── The invariant's instrument ───────────────────────────────────────────
 
 	/**
@@ -118,6 +158,13 @@ public:
 	 * must leave byte-identical. The test diffs this before and after every op.
 	 */
 	static std::string CanonicalOutsideCurrentState(const FJsonValue& SaveRoot);
+
+	/**
+	 * Canonical JSON of the save with `conversations` removed — everything a
+	 * dialogue write must leave byte-identical, currentState included. The gate
+	 * diffs this before and after a history flush.
+	 */
+	static std::string CanonicalOutsideConversations(const FJsonValue& SaveRoot);
 
 	/** Total item count across player, every container and every merchant. */
 	static long long ItemCensus(const FTradeState& State);

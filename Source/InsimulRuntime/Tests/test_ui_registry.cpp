@@ -2,7 +2,7 @@
 //
 // test_ui_registry.cpp — host gate for the default-UI registry + loading
 // view-model + theme tokens (US-XU1). Builds under a plain clang toolchain (no
-// Unreal Engine, no UBT; see tools/verify-unreal/run-ui-tests.sh) and proves the
+// Unreal Engine, no UBT; ctest `ui_registry`) and proves the
 // Unreal cores against the SAME engine-neutral corpus every other default-UI
 // mirror runs (packages/core/conformance/ui/*.json), so the four legs (Babylon,
 // Unity, Godot, Unreal) can never diverge:

@@ -12,6 +12,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dialogue + pause/main menu + save/load, module-bundle gated (US-3 of 190).**
+  The last third of the default-UI suite: the chat panel on the streaming
+  conversation SDK, the unified ESC menu, the main menu and the save/load slot
+  screen — all three screens generated as WBPs and resolved through the module
+  registry, so a creator swaps any of them without touching engine code.
+  - **The screens.** `UInsimulMainMenuPanel` (`main_menu`), `UInsimulPauseMenuPanel`
+    (`pause_menu`) and `UInsimulSaveLoadPanel` (`save_load`), each a thin
+    syntax-gated UMG boundary over a core host-tested UE-free. The main menu's
+    Continue is a MEASUREMENT, not a flag: it is the save codec's own outcomes
+    projected by `FInsimulSaveSlotModel`, so a tampered save is refused with the
+    shared message instead of offered, and the slot it resumes is the most recently
+    saved LOADABLE one by the codec's ISO-8601 `savedAt`. That decision lives in
+    the PORTABLE model (`ContinueSlot()` / `ContinueBlockedReason()`), where
+    `ui_save_slots` can gate it — the newest stamp wins, an unstamped save loses to
+    a stamped one, a tie falls to the lower index, the listing order changes
+    nothing, and corrupting the winner hands Continue to the runner-up. The ESC
+    shell applies two
+    gates, both data — the module bundle's tab gate and the mechanic module's panel
+    gate — and a tab whose panel is withheld is DROPPED and named rather than left
+    to open an empty box. The slot screen renders a corrupted envelope as a row
+    that refuses Load and still offers Save, because hiding it would tell a player
+    their save vanished.
+  - **The dialogue history lands in `save.conversations`.**
+    `FInsimulUIStateBinding::HydrateConversation` / `ApplyConversation` are the one
+    seam for it, writing the row in place — every other field of it, every other
+    row, and `currentState` above all, stay byte-identical (a new
+    `CanonicalOutsideConversations` instrument proves it). Conversations are the
+    documented exception to "the panels read `currentState`": the save schema has
+    carried them as their own top-level array since v1, and inventing
+    `currentState.dialogue` in one port is exactly the divergence the state
+    invariant exists to stop.
+  - **The gate that was missing.** `test_dialogue_ui.cpp` named
+    `run-dialogue-ui-tests.sh`, a runner that lives in the parent platform checkout
+    and does not exist here, so for two bands NOTHING compiled the chat, pause-menu
+    and save-slot cases. It is four ctest legs now — `ui_chat`, `ui_pause_menu`,
+    `ui_save_slots`, `ui_chat_history` — over one binary selected by `--only`, so a
+    failure names the area: 63 assertions of which 13 are negative controls. Every
+    header that pointed at the phantom runner now names the leg that runs it.
+  - `npm run check:panels` reports **21 of 22** catalog rows generated: `main_menu`,
+    `pause_menu` and `save_load` moved out of PENDING into `WIDGET_SPECS`, leaving
+    only `quest_journal` (the export module's own widget, which declares no
+    BindWidget children).
+  - Docs: `docs/ui.md` § the screens + tests, and a `VERIFICATION.md` § US-3 (190)
+    human checklist for the full loop — streaming a turn, killing the network
+    mid-stream, a genre that withholds a tab, and a byte-flipped save that must not
+    be continuable.
 - **The play panels, backed only by `save.currentState` (US-2 of 190).** Quest
   journal / tracker / offer, inventory / containers / equipment, shop + reputation,
   the skill tree, the HUD and its map / quick-bar / wheel sub-panels, the notice

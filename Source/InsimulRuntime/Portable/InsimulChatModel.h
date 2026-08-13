@@ -17,7 +17,7 @@
 // LastNpcText() on Complete(); they are not part of this pure core.
 //
 // std-only (no Unreal Engine, no CoreMinimal.h) so the whole contract runs under
-// tools/verify-unreal/run-dialogue-ui-tests.sh. The UMG seam (UInsimulChatPanel,
+// ctest `ui_chat` / `ui_chat_history` (190 US-3). The UMG seam (UInsimulChatPanel,
 // Public/InsimulChatPanel.h) is a thin UObject boundary on top, syntax-gated only.
 // Every default-UI leg runs the SAME matrix
 // (packages/core/conformance/ui/chat-cases.json) so the four legs cannot diverge.

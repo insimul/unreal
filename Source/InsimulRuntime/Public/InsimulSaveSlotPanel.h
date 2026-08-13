@@ -10,7 +10,7 @@
 // the cross-engine contract proven by the portable core.
 //
 // All rendering SEMANTICS live in the portable core and are host-tested by
-// run-dialogue-ui-tests.sh. This class is the thin, syntax-gated Blueprint /
+// ctest `ui_save_slots`. This class is the thin, syntax-gated Blueprint /
 // UObject boundary (pimpl).
 
 #pragma once
@@ -20,7 +20,7 @@
 #include "InsimulSaveSlotPanel.generated.h"
 
 // The engine-agnostic model this seam wraps (pimpl). Host-tested by
-// run-dialogue-ui-tests.sh.
+// ctest `ui_save_slots`.
 namespace insimul { class FInsimulSaveSlotModel; }
 
 /** A codec-reported slot summary (a healthy save's title/message source). */
@@ -120,6 +120,15 @@ public:
 	/** True when any slot is loadable (main-menu Continue gate). */
 	UFUNCTION(BlueprintPure, Category = "Insimul|Save")
 	bool HasAnyLoadable() const;
+
+	/** The slot Continue resumes — the most recently saved LOADABLE one, by the
+	 *  codec's ISO-8601 `savedAt` — or INDEX_NONE. Never a corrupted slot. */
+	UFUNCTION(BlueprintPure, Category = "Insimul|Save")
+	int32 ContinueSlot() const;
+
+	/** Why Continue is unavailable ("" when it is available). */
+	UFUNCTION(BlueprintPure, Category = "Insimul|Save")
+	FString ContinueBlockedReason() const;
 
 	virtual void BeginDestroy() override;
 

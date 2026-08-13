@@ -1,7 +1,7 @@
 // Copyright 2024 Insimul. All Rights Reserved.
 //
 // FInsimulChatModel implementation — see InsimulChatModel.h. std-only; host-tested
-// by tools/verify-unreal/run-dialogue-ui-tests.sh against chat-cases.json.
+// by ctest `ui_chat` / `ui_chat_history` against chat-cases.json.
 
 #include "InsimulChatModel.h"
 

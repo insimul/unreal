@@ -1,7 +1,7 @@
 // Copyright 2024 Insimul. All Rights Reserved.
 //
 // FInsimulPauseMenuModel implementation — see InsimulPauseMenuModel.h. std-only;
-// host-tested by run-dialogue-ui-tests.sh against pause-menu-cases.json.
+// host-tested by ctest `ui_pause_menu` against pause-menu-cases.json.
 
 #include "InsimulPauseMenuModel.h"
 

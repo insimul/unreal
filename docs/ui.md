@@ -165,8 +165,9 @@ registry tests pass on the shared cases" was a claim with no gate behind it. The
 registry/loading/theme/gate leg is a ctest target now. US-2 wired the rest of its
 half: `test_quest_journal.cpp` is ctest `ui_quest_journal`, `test_trade.cpp` is
 `ui_trade`, `test_ui_state_binding.cpp` is `ui_state_binding` and
-`test_skill_tree.cpp` is `ui_skill_tree`. `test_dialogue_ui.cpp` is still orphaned
-and is US-3's to wire.
+`test_skill_tree.cpp` is `ui_skill_tree`. US-3 wired the last one:
+`test_dialogue_ui.cpp` is ctest `ui_chat` / `ui_pause_menu` / `ui_save_slots` /
+`ui_chat_history`. No UI host test is orphaned now.
 
 ## Quest panels + notifications (US-XU2)
 
@@ -343,7 +344,7 @@ in one project do not link. Deleting the prototypes is a separate change from
 landing their replacements.
 
 
-## Dialogue panel + pause/main menu + save/load (US-XU4)
+## Dialogue panel + pause/main menu + save/load (US-XU4, screens in 190 US-3)
 
 The last three default-UI cores mirror the shared corpora case-for-case (Babylon /
 Unity / Godot / Unreal); all decision logic is UE-free and host-tested, with a thin
@@ -387,14 +388,81 @@ its MESSAGE is the cross-engine contract — e.g. an integrity mismatch on a tam
 save always reads "Save file integrity check failed — file may be corrupted or
 tampered." `HasAnyLoadable()` gates the main-menu Continue button. Shared cases:
 `save-slot-cases.json`. The `UInsimulSaveSlotPanel` seam feeds the rows to the
-save/load screen.
+save/load screen. `ContinueSlot()` / `ContinueBlockedReason()` (190 US-3) answer
+the main menu: the most recently saved LOADABLE slot by the codec's ISO-8601
+`savedAt` — never a corrupted one, however recent — or none, with the reason.
+
+### The screens (tasklist 190 US-3)
+
+The three cores above are decision layers; US-3 added the UMG screens that show
+them, each generated as a WBP by `GenerateInsimulContent.py` and bound to its
+catalog panel key, so a creator swaps any of them through the registry without
+touching engine code.
+
+`UInsimulMainMenuPanel` (`main_menu`) — title, New Game, Continue, Load, Settings,
+Quit. **Continue is a measurement, not a flag**: whether the player may continue is
+`FInsimulSaveSlotModel`'s answer over the codec's outcomes — the same core the
+save/load screen uses — so a tampered save is refused with the shared message
+rather than offered. `ContinueSlot()` is the most recently saved LOADABLE slot,
+ordered by the codec's ISO-8601 `savedAt` and never by a local clock. Every entry
+is a delegate: loading a level, writing a save and quitting belong to the game
+mode, because a panel that called `UGameplayStatics` itself could not be swapped.
+
+`UInsimulPauseMenuPanel` (`pause_menu`) — the unified ESC shell. Two gates, both
+data: the TAB gate is the module bundle applied by `FInsimulPauseMenuModel`, the
+PANEL gate is the mechanic module owning the panel a tab hosts, answered by
+`UInsimulUIPanelSurface`. A tab shows only when BOTH say yes, and a tab whose panel
+is withheld is dropped rather than left to open an empty box — `WithheldTabs()` and
+`Describe()` name every such drop, so a missing Skills tab is diagnosable without a
+debugger. Pausing, input capture and transitions stay with the owning widget.
+
+`UInsimulSaveLoadPanel` (`save_load`) — the slot screen the ESC menu hosts and the
+main menu opens. It renders outcomes and judges none of them: a corrupted slot gets
+a ROW (status, message, Load refused, Save still offered), because hiding it would
+tell a player their save vanished, and overwriting is the recovery they need.
 
 ### Tests
 
-`npm run engines:unreal:dialogue-ui`
-(`tools/verify-unreal/run-dialogue-ui-tests.sh`) grep-guards all three cores as
-UE-free, then compiles + runs `test_dialogue_ui.cpp` (24 assertions): the full
-`chat-cases.json` streaming/action/history matrix, the `pause-menu-cases.json`
-tab-gating + open/active reducer, the `save-slot-cases.json` row rendering incl. the
-corrupted-envelope messaging, plus a handful of edge-behaviour unit assertions.
-Wired into `npm run engines:check` under the Unreal block.
+`npm run check:host` from `tools/` runs `test_dialogue_ui.cpp` as FOUR ctest legs
+over one binary (`--only <area>`), so a failure names the area rather than "the
+dialogue tests":
+
+| leg | what it pins |
+| --- | --- |
+| `ui_chat` | the streaming turn lifecycle, the KB actions a stream triggers, the transcript and the history projection (`chat-cases.json`) |
+| `ui_pause_menu` | module-bundle tab gating (AND) + the open/active-tab reducer (`pause-menu-cases.json`) |
+| `ui_save_slots` | slot rendering incl. the corrupted-envelope MESSAGING contract (`save-slot-cases.json`), and the main menu's Continue gate |
+| `ui_chat_history` | where the history LANDS: flushed into a real save envelope's `conversations` (`conformance/saves/v2-typical.json`), read back, with everything else — `currentState` above all — byte-identical |
+
+63 assertions, of which 13 are negative controls: an unexpected NPC line, a dropped
+chunk, an unauthored tab, enabling the withheld modules, an unexpected slot,
+calling a corrupted envelope healthy, a newer save that must move Continue, a
+corrupted winner that must hand Continue to the runner-up, a never-flushed
+conversation, a changed character, an instrument that must move when
+`currentState` does, a non-array `conversations` and a flush with no character id
+each redden the corresponding comparison.
+
+**Continue is in the core, not in the menu widget.** Which slot the main menu
+resumes is a decision (`FInsimulSaveSlotModel::ContinueSlot()`), so it sits where a
+host gate can reach it rather than in `UInsimulMainMenuPanel`, which no gate here
+compiles. The shared corpus pins the ROWS and `expected_has_loadable`, not the
+ordering — core's own main menu is playthrough-based — so `ui_save_slots` DERIVES
+its expectation per case (the answer must be a `can_load` row, never a corrupted
+one, and the `savedAt`-maximal loadable row) and then states the ordering rule
+directly: the newest ISO-8601 stamp wins, an unstamped save loses to a stamped one,
+an equal stamp falls to the lower index, and the listing order the caller used
+changes nothing.
+
+Before US-3 this section named `npm run engines:unreal:dialogue-ui` and
+`tools/verify-unreal/run-dialogue-ui-tests.sh`. Neither exists in this repository —
+that script belongs to the parent platform checkout — so for two bands nothing
+compiled these cases and "the dialogue tests pass" was a claim with no gate behind
+it. It is the same failure US-1 found in the registry tests, and it is why the
+runner a header names is now checked against the runner that exists.
+
+`npm run check:panels` closes the other half for the three screens: each of
+`main_menu`, `pause_menu` and `save_load` is a catalog row whose WBP
+`GenerateInsimulContent.py` actually generates, bound to that key, with bound child
+names matching the `BindWidgetOptional` properties. The UMG behaviour itself
+(clicking Continue on a corrupted-only save directory, a withheld tab disappearing)
+is the human checklist in `VERIFICATION.md` § 190 US-3 — there is no UBT here.

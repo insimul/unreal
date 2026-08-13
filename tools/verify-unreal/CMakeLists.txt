@@ -374,6 +374,58 @@ target_compile_definitions(insimul_verify_ui_skill_tree PRIVATE
 target_compile_options(insimul_verify_ui_skill_tree PRIVATE ${WARN_FLAGS})
 add_test(NAME ui_skill_tree COMMAND insimul_verify_ui_skill_tree)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dialogue + pause/main menu + save/load (tasklist 190 US-3, docs/ui.md).
+#
+# test_dialogue_ui.cpp existed before this story and, like the quest/trade tests
+# before US-2, was compiled by NOTHING: it named run-dialogue-ui-tests.sh, a runner
+# that lives in the parent platform checkout and does not exist here. So the chat /
+# pause-menu / save-slot cores were three claims with no gate behind them. One
+# binary, four legs (`--only <area>`), so a failure names the AREA rather than "the
+# dialogue tests":
+#
+#   ui_chat          the streaming turn lifecycle, the triggered actions the panel
+#                    asserts into the KB, and the history projection.
+#   ui_pause_menu    module-bundle tab gating (AND) + the open/active-tab reducer.
+#   ui_save_slots    slot rendering incl. the corrupted-envelope MESSAGING every
+#                    default-UI leg must share, and the main menu's Continue gate
+#                    (which slot resumes, and why it may not).
+#   ui_chat_history  where that history LANDS: flushed into a real save envelope's
+#                    `conversations`, read back, with everything else — currentState
+#                    above all — byte-identical.
+#
+# The last leg links the save + state-binding stack for that reason; the first
+# three would run without it, and are not split off because one source file with
+# one corpus reader is cheaper to keep honest than two.
+# ─────────────────────────────────────────────────────────────────────────────
+
+add_executable(insimul_verify_ui_dialogue
+    "${RUNTIME_DIR}/Tests/test_dialogue_ui.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulChatModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulPauseMenuModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSlotModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestJournalModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradeModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulTradePricing.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulEquipmentModel.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulUIStateBinding.cpp"
+)
+target_include_directories(insimul_verify_ui_dialogue PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_ui_dialogue PRIVATE
+    INSIMUL_UI_DIR="${UI_DIR}"
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+)
+target_compile_options(insimul_verify_ui_dialogue PRIVATE ${WARN_FLAGS})
+add_test(NAME ui_chat COMMAND insimul_verify_ui_dialogue --only chat)
+add_test(NAME ui_pause_menu COMMAND insimul_verify_ui_dialogue --only pause)
+add_test(NAME ui_save_slots COMMAND insimul_verify_ui_dialogue --only save)
+add_test(NAME ui_chat_history COMMAND insimul_verify_ui_dialogue --only history)
+
 # ── discover libinsimulcore + libinsimul (vendored-first, then sibling) ──────
 # Mirrors the corpus lookup above and Godot's run_radiant_tests.sh. Point it
 # somewhere explicit with either:

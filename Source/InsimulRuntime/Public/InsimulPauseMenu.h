@@ -9,7 +9,7 @@
 //
 // All gating + reducer SEMANTICS (AND-gating, open-to-hidden falls back to the
 // first visible tab, SetActive rejects hidden tabs) live in the portable core and
-// are host-tested by run-dialogue-ui-tests.sh. This class is the thin,
+// are host-tested by ctest `ui_pause_menu`. This class is the thin,
 // syntax-gated Blueprint / UObject boundary (pimpl).
 
 #pragma once
@@ -19,7 +19,7 @@
 #include "InsimulPauseMenu.generated.h"
 
 // The engine-agnostic model this seam wraps (pimpl). Host-tested by
-// run-dialogue-ui-tests.sh.
+// ctest `ui_pause_menu`.
 namespace insimul { class FInsimulPauseMenuModel; }
 
 /** One menu tab as the ESC menu renders it. */

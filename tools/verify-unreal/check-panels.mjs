@@ -39,15 +39,13 @@ const EXPORT_UI = join(ROOT, 'templates', 'source', 'ui');
 
 /**
  * Panel keys the catalog carries that no WBP spec serves yet, each with the story
- * that owes it. tasklist 190 US-3 lands the menu shell, the main menu and the
- * save/load slots; `quest_journal`'s widget is the export module's own
- * UQuestJournalWidget, which predates the bound-widget convention this script
- * generates for (it declares no BindWidget children to name).
+ * that owes it. 190 US-3 cleared `main_menu`, `pause_menu` and `save_load` — the
+ * three UMG panels it landed are generated now, so they are gated rather than
+ * declared. What is left is `quest_journal`, whose widget is the export module's
+ * own UQuestJournalWidget: it predates the bound-widget convention this script
+ * generates for and declares no BindWidget children to name.
  */
 const PENDING = {
-  main_menu: '190 US-3 (main menu)',
-  pause_menu: '190 US-3 (unified ESC menu)',
-  save_load: '190 US-3 (save/load slots)',
   quest_journal: 'UQuestJournalWidget (export module) declares no BindWidget children',
 };
 
@@ -176,7 +174,7 @@ function negativeControls(rows, specs, classes) {
     specs,
     classes,
   });
-  // PENDING is what silences the four rows below, and nothing else: drop the
+  // PENDING is what silences the row(s) it names, and nothing else: drop the
   // declaration and they are failures again, so the list cannot hide a regression.
   fires('an undeclared PENDING row', { rows, specs, classes, pending: {} });
   // A spec bound to the wrong key.

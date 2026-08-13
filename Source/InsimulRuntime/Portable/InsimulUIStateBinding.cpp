@@ -580,6 +580,148 @@ bool FInsimulUIStateBinding::HydrateLedger(const FJsonValue& SaveRoot, const std
 
 // ── The invariant's instrument ──────────────────────────────────────────────
 
+// ── Conversations (the dialogue panel's history) ────────────────────────────
+
+namespace {
+
+/** The conversations array, or nullptr when the save carries none. Sets OutError
+ *  only when the member is present and is NOT an array. */
+const FJsonValue* FindConversations(const FJsonValue& SaveRoot, std::string& OutError) {
+	const FJsonValue* Rows = SaveRoot.Find("conversations");
+	if (!Rows) {
+		return nullptr;
+	}
+	if (!Rows->IsArray()) {
+		OutError = "save.conversations is present and is not an array";
+		return nullptr;
+	}
+	return Rows;
+}
+
+} // namespace
+
+bool FInsimulUIStateBinding::HydrateConversation(const FJsonValue& SaveRoot,
+	const std::string& CharacterId, FChatHistory& Out, std::string& OutError) {
+	Out = FChatHistory();
+	OutError.clear();
+
+	if (!SaveRoot.IsObject()) {
+		OutError = "the document is not a save file (no object root)";
+		return false;
+	}
+	if (CharacterId.empty()) {
+		OutError = "a conversation is read for a character; no id was given";
+		return false;
+	}
+
+	const FJsonValue* Rows = FindConversations(SaveRoot, OutError);
+	if (!OutError.empty()) {
+		return false;
+	}
+	if (!Rows) {
+		// A save that has spoken to nobody. Not an error — the first meeting.
+		return true;
+	}
+
+	for (const FJsonValuePtr& Row : Rows->ArrayItems) {
+		if (!Row || !Row->IsObject() || Row->GetString("npcCharacterId") != CharacterId) {
+			continue;
+		}
+		const FJsonValue* Turns = Row->Find("recentTurns");
+		if (Turns && Turns->IsArray()) {
+			for (const FJsonValuePtr& Turn : Turns->ArrayItems) {
+				if (!Turn || !Turn->IsObject()) {
+					continue;
+				}
+				FChatHistoryTurn Out1;
+				Out1.Role = Turn->GetString("role");
+				Out1.Content = Turn->GetString("content");
+				Out1.Timestamp = Turn->GetString("timestamp");
+				Out.RecentTurns.push_back(Out1);
+			}
+		}
+		Out.TotalTurnCount = Row->GetInt("totalTurnCount", 0);
+		return true;
+	}
+	// No row for this character: an empty history, which is what a panel opening on
+	// a stranger must show.
+	return true;
+}
+
+bool FInsimulUIStateBinding::ApplyConversation(const std::string& CharacterId,
+	const std::string& CharacterName, const FChatHistory& History, FJsonValue& SaveRoot,
+	std::string& OutError) {
+	OutError.clear();
+
+	if (!SaveRoot.IsObject()) {
+		OutError = "the document is not a save file (no object root)";
+		return false;
+	}
+	if (CharacterId.empty()) {
+		OutError = "a conversation is written for a character; no id was given";
+		return false;
+	}
+	{
+		std::string TypeError;
+		FindConversations(SaveRoot, TypeError);
+		if (!TypeError.empty()) {
+			// Refuse rather than clobber: whatever is under that key, it is not the
+			// history array this seam owns.
+			OutError = TypeError;
+			return false;
+		}
+	}
+
+	FJsonValue* Rows = ObjFind(SaveRoot, "conversations");
+	if (!Rows) {
+		ObjSet(SaveRoot, "conversations", MakeArray());
+		Rows = ObjFind(SaveRoot, "conversations");
+	}
+
+	auto Turns = MakeArray();
+	for (const FChatHistoryTurn& Turn : History.RecentTurns) {
+		auto Node = MakeObject();
+		ObjSet(*Node, "role", MakeString(Turn.Role));
+		ObjSet(*Node, "content", MakeString(Turn.Content));
+		// The clock is the host's. An unstamped turn writes no timestamp rather
+		// than a minted one (see the header).
+		if (!Turn.Timestamp.empty()) {
+			ObjSet(*Node, "timestamp", MakeString(Turn.Timestamp));
+		}
+		Turns->ArrayItems.push_back(std::move(Node));
+	}
+
+	// The existing row, if this playthrough has met the character before. Every
+	// field this seam does not own stays exactly as it was.
+	FJsonValue* Row = nullptr;
+	for (const FJsonValuePtr& Candidate : Rows->ArrayItems) {
+		if (Candidate && Candidate->IsObject()
+			&& Candidate->GetString("npcCharacterId") == CharacterId) {
+			Row = Candidate.get();
+			break;
+		}
+	}
+	if (!Row) {
+		auto Fresh = MakeObject();
+		ObjSet(*Fresh, "npcCharacterId", MakeString(CharacterId));
+		Rows->ArrayItems.push_back(Fresh);
+		Row = Rows->ArrayItems.back().get();
+	}
+
+	if (!CharacterName.empty()) {
+		ObjSet(*Row, "npcCharacterName", MakeString(CharacterName));
+	}
+	ObjSet(*Row, "recentTurns", std::move(Turns));
+	ObjSet(*Row, "totalTurnCount", MakeInt(History.TotalTurnCount));
+	return true;
+}
+
+std::string FInsimulUIStateBinding::CanonicalOutsideConversations(const FJsonValue& SaveRoot) {
+	FJsonValue Copy = SaveRoot;
+	ObjRemove(Copy, "conversations");
+	return CanonicalJsonStringify(Copy);
+}
+
 std::string FInsimulUIStateBinding::CanonicalOutsideCurrentState(const FJsonValue& SaveRoot) {
 	FJsonValue Copy = SaveRoot;
 	ObjRemove(Copy, "currentState");

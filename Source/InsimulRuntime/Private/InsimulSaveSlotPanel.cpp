@@ -95,6 +95,19 @@ bool UInsimulSaveSlotPanel::HasAnyLoadable() const
 	return Model.IsValid() && Model->HasAnyLoadable();
 }
 
+int32 UInsimulSaveSlotPanel::ContinueSlot() const
+{
+	// The portable model's -1 is UE's INDEX_NONE; the DECISION is never re-made here.
+	const int Answer = Model.IsValid() ? Model->ContinueSlot() : -1;
+	return Answer < 0 ? INDEX_NONE : static_cast<int32>(Answer);
+}
+
+FString UInsimulSaveSlotPanel::ContinueBlockedReason() const
+{
+	return Model.IsValid() ? ToFString(Model->ContinueBlockedReason())
+						   : FString(TEXT("No saved game to continue."));
+}
+
 void UInsimulSaveSlotPanel::BeginDestroy()
 {
 	Model.Reset();

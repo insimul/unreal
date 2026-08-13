@@ -368,6 +368,47 @@ WIDGET_SPECS = {
             ("UTextBlock", "DiagnosticText"),
         ],
     },
+    "WBP_MainMenu": {
+        # The front screen. Continue is not a flag on this asset: the C++ asks the
+        # save codec's own outcomes through the slot model (ctest `ui_save_slots`),
+        # so a tampered save is refused here for the same reason, and with the same
+        # words, as it is on the save/load screen.
+        "parent": "InsimulMainMenuPanel",
+        "panel_key": "main_menu",
+        "children": [
+            ("UTextBlock", "TitleText"),
+            ("UButton", "NewGameButton"),
+            ("UButton", "ContinueButton"),
+            ("UButton", "LoadGameButton"),
+            ("UButton", "SettingsButton"),
+            ("UButton", "QuitButton"),
+            ("UTextBlock", "ContinueHintText"),
+        ],
+    },
+    "WBP_PauseMenu": {
+        # The unified ESC shell. The tab bar and the content box are created EMPTY:
+        # which tabs exist is the module bundle's answer (portable pause-menu model)
+        # crossed with the panel surface's, and the C++ fills both boxes at runtime.
+        "parent": "InsimulPauseMenuPanel",
+        "panel_key": "pause_menu",
+        "children": [
+            ("UHorizontalBox", "TabBar"),
+            ("UVerticalBox", "TabContentBox"),
+            ("UTextBlock", "DiagnosticText"),
+        ],
+    },
+    "WBP_SaveLoad": {
+        # Save/load slots. A corrupted envelope gets a ROW, not a hole: the status,
+        # the message and whether Load is offered are the slot model's, shared with
+        # the other three engines through conformance/ui/save-slot-cases.json.
+        "parent": "InsimulSaveLoadPanel",
+        "panel_key": "save_load",
+        "children": [
+            ("UVerticalBox", "SlotListBox"),
+            ("UTextBlock", "StatusText"),
+            ("UTextBlock", "EmptyListText"),
+        ],
+    },
 }
 
 
